@@ -34,7 +34,7 @@ def test_max_iterations_process_once():
         responses.append(queue.submit(RunFunctionCommand(RunFunctionCommand.ARGS())))
 
     queue_response = queue.process_once(max_iterations=100)
-    assert queue_response.num_commands_run == 100
+    assert queue_response.num_commands_processed == 100
     assert queue_response.reached_max_iterations is True
 
     assert len([r for r in responses if r.status == ResponseStatus.COMPLETED]) == 100
@@ -57,5 +57,5 @@ def test_max_iterations_process_all():
         )
 
     queue_response = queue.process_all(max_total_iterations=100)
-    assert queue_response.num_commands_run == 100
+    assert queue_response.num_commands_processed == 100
     assert len(queue) == 50  # 50 remaining commands in the queue

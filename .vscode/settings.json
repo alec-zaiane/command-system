@@ -1,6 +1,8 @@
 {
     "python.testing.pytestArgs": [
-        "tests"
+        "--cov-report=xml",
+        "--cov-report=html",
+        "--cov-report=term"
     ],
     "python.testing.unittestEnabled": false,
     "python.testing.pytestEnabled": true

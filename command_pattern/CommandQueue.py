@@ -31,7 +31,7 @@ class QueueProcessResponse:
 
     Attributes:
         command_log (list[CommandLogEntry]): List of all commands processed, along with all responses from their lifecycle actions.
-        num_commands_run (int): Total number of commands processed in this run.
+        num_commands_processed (int): Total number of commands processed in this run.
         num_ingested (int): Number of commands that turned from `CREATED` to `PENDING` status.
         num_deferrals (int): Number of times a command was deferred.
         num_cancellations (int): Number of times a command was canceled.
@@ -41,7 +41,7 @@ class QueueProcessResponse:
     """
 
     command_log: list[CommandLogEntry]
-    num_commands_run: int = 0
+    num_commands_processed: int = 0
     num_ingested: int = 0
     num_deferrals: int = 0
     num_cancellations: int = 0
@@ -60,7 +60,7 @@ class QueueProcessResponse:
             QueueProcessResponse: A new QueueProcessResponse object with combined values.
         """
         return QueueProcessResponse(
-            num_commands_run=self.num_commands_run + other.num_commands_run,
+            num_commands_processed=self.num_commands_processed + other.num_commands_processed,
             num_ingested=self.num_ingested + other.num_ingested,
             num_deferrals=self.num_deferrals + other.num_deferrals,
             num_cancellations=self.num_cancellations + other.num_cancellations,
@@ -104,11 +104,11 @@ class CommandQueue:
         to_remove: list[Command[Any, Any]] = []
         for command in self._queue:
             command_log_entry = CommandLogEntry(command=command, responses=[])
-            if response.num_commands_run >= max_iterations:
+            if response.num_commands_processed >= max_iterations:
                 response.reached_max_iterations = True
                 break
             command = cast(Command[CommandArgs, CommandResponse], command)
-            response.num_commands_run += 1
+            response.num_commands_processed += 1
             if command.response.status == ResponseStatus.CREATED:
                 response.num_ingested += 1
                 command.response.status = ResponseStatus.PENDING
@@ -171,7 +171,7 @@ class CommandQueue:
         """
         response = QueueProcessResponse(command_log=[])
         while len(self._queue) > 0:
-            if response.num_commands_run >= max_total_iterations:
+            if response.num_commands_processed >= max_total_iterations:
                 response.reached_max_iterations = True
                 break
             response += self.process_once(max_iterations=max_total_iterations)

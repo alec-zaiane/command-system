@@ -39,7 +39,7 @@ def test_say_hello_success():
     assert response.status == ResponseStatus.CREATED
     queue_response = queue.process_once()
     assert response.status == ResponseStatus.COMPLETED
-    assert queue_response.num_commands_run == 1
+    assert queue_response.num_commands_processed == 1
     assert queue_response.num_ingested == 1
     assert queue_response.num_deferrals == 0
     assert queue_response.num_cancellations == 0
@@ -47,6 +47,9 @@ def test_say_hello_success():
     assert queue_response.num_failures == 0
     assert queue_response.reached_max_iterations is False
     assert response.message == "Hello, Alice!"
+    queue_response = queue.process_once()
+    assert queue_response.num_commands_processed == 0
+    assert len(queue) == 0
 
 
 def test_say_hello_failure():
@@ -57,3 +60,17 @@ def test_say_hello_failure():
     queue_response = queue.process_once()
     assert response.status == ResponseStatus.FAILED
     assert queue_response.command_log[-1].responses[-1].reason == "Cannot say hello to no one."
+
+
+def test_re_add_completed_command():
+    queue = CommandQueue()
+    command = SayHelloCommand(SayHelloCommand.ARGS(name="Bob"))
+    response = queue.submit(command)
+    queue.process_once()
+    assert response.status == ResponseStatus.COMPLETED
+    queue.submit(command)  # Re-add the same command
+    queue_response = queue.process_once()
+    assert queue_response.num_commands_processed == 1
+    assert (
+        queue_response.num_failures + queue_response.num_successes == 0
+    )  # nothing actually executed
