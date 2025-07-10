@@ -2,15 +2,6 @@
 
 from typing import Optional
 from dataclasses import dataclass
-from enum import Enum
-
-
-class ResponseStatus(Enum):
-    CREATED = "created"
-    PENDING = "pending"
-    CANCELED = "canceled"
-    FAILED = "failed"
-    COMPLETED = "completed"
 
 
 @dataclass

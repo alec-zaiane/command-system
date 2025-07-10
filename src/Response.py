@@ -1,5 +1,14 @@
 from dataclasses import dataclass
-from CommandLifecycle import ResponseStatus
+
+from enum import Enum
+
+
+class ResponseStatus(Enum):
+    CREATED = "created"
+    PENDING = "pending"
+    CANCELED = "canceled"
+    FAILED = "failed"
+    COMPLETED = "completed"
 
 
 @dataclass

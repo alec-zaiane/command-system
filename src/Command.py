@@ -2,8 +2,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Generic, TypeVar, Type, final, Callable
 
-from Response import Response, ResponseStatus
-from CommandLifecycle import DeferResponse, CancelResponse, ExecutionResponse
+from .Response import Response, ResponseStatus
+from .CommandLifecycle import DeferResponse, CancelResponse, ExecutionResponse
 
 
 @dataclass

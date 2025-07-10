@@ -1,18 +1,34 @@
-from Command import Command, CommandArgs, ResponseType
-from Response import Response
-from CommandLifecycle import ResponseStatus
+from .Command import Command, CommandArgs, ResponseType
+from .Response import Response, ResponseStatus
+from .CommandLifecycle import LifecycleResponse
 from typing import Any, cast
 from dataclasses import dataclass
 
 
 @dataclass
-class ProcessResponse:
+class CommandLogEntry:
+    """
+    Represents a single command log entry.
+
+    Contains the command and the responses from its lifecycle actions.
+    """
+
+    command: Command[Any, Any]
+    """The command that was processed"""
+    responses: list[LifecycleResponse]
+    """List of responses from the lifecycle actions of the command"""
+
+
+@dataclass
+class QueueProcessResponse:
     """
     Response type of `CommandQueue.process_once()` and `CommandQueue.process_all()`.
 
     Contains information about said processing
     """
 
+    command_log: list[CommandLogEntry]
+    """list of all commands processed, along with all responses from their lifecycle actions"""
     num_commands_run: int = 0
     """Total number of commands processed in this run"""
     num_ingested: int = 0
@@ -28,7 +44,14 @@ class ProcessResponse:
     reached_max_iterations: bool = False
     """True if the maximum number of iterations was reached, false otherwise."""
 
-    def __add__(self, other: "ProcessResponse") -> "ProcessResponse":
+    def get_successes(self) -> list[Command[Any, Any]]:
+        output: list[Command[Any, Any]] = []
+        for entry in self.command_log:
+            if entry.command.response.status == ResponseStatus.COMPLETED:
+                output.append(entry.command)
+        return output
+
+    def __add__(self, other: "QueueProcessResponse") -> "QueueProcessResponse":
         """
         Add two ProcessResponse objects together.
 
@@ -38,7 +61,7 @@ class ProcessResponse:
         Returns:
             ProcessResponse: A new ProcessResponse object with combined values.
         """
-        return ProcessResponse(
+        return QueueProcessResponse(
             num_commands_run=self.num_commands_run + other.num_commands_run,
             num_ingested=self.num_ingested + other.num_ingested,
             num_deferrals=self.num_deferrals + other.num_deferrals,
@@ -47,6 +70,7 @@ class ProcessResponse:
             num_failures=self.num_failures + other.num_failures,
             reached_max_iterations=self.reached_max_iterations
             or other.reached_max_iterations,
+            command_log=self.command_log + other.command_log,
         )
 
 
@@ -67,7 +91,7 @@ class CommandQueue:
         self._queue.append(command)
         return command.response
 
-    def process_once(self, max_iterations: int = 1000) -> ProcessResponse:
+    def process_once(self, max_iterations: int = 1000) -> QueueProcessResponse:
         """
         Process all commands in the queue a single time.
 
@@ -76,9 +100,10 @@ class CommandQueue:
         Args: max_iterations (int, optional): Maximum number of commands to process in one call. Defaults to 1000.
 
         """
-        response = ProcessResponse()
+        response = QueueProcessResponse(command_log=[])
         to_remove: list[Command[Any, Any]] = []
         for command in self._queue:
+            command_log_entry = CommandLogEntry(command=command, responses=[])
             if response.num_commands_run >= max_iterations:
                 response.reached_max_iterations = True
                 break
@@ -90,12 +115,14 @@ class CommandQueue:
             if command.response.status == ResponseStatus.PENDING:
                 # check if we should defer
                 defer_response = command.should_defer()
+                command_log_entry.responses.append(defer_response)
                 if not defer_response.should_proceed:
                     response.num_deferrals += 1
                     command.call_on_defer_callbacks(defer_response)
                     continue
                 # now check if we should cancel
                 cancel_response = command.should_cancel()
+                command_log_entry.responses.append(cancel_response)
                 if not cancel_response.should_proceed:
                     response.num_cancellations += 1
                     command.call_on_cancel_callbacks(cancel_response)
@@ -104,6 +131,7 @@ class CommandQueue:
                     continue
                 # finally, execute the command
                 execution_response = command.execute()
+                command_log_entry.responses.append(execution_response)
                 command.call_on_execute_callbacks(execution_response)
                 if execution_response.should_proceed:
                     command.response.status = ResponseStatus.COMPLETED
@@ -119,13 +147,14 @@ class CommandQueue:
             ):
                 # maybe it was already processed, and accidentally re-added to the queue
                 to_remove.append(command)
+            response.command_log.append(command_log_entry)
         # remove all processed commands
         for command in to_remove:
             if command in self._queue:
                 self._queue.remove(command)
         return response
 
-    def process_all(self, max_total_iterations: int = 1000) -> ProcessResponse:
+    def process_all(self, max_total_iterations: int = 1000) -> QueueProcessResponse:
         """
         Process all commands in the queue until either all commands are processed, or the maximum number of iterations is reached.
 
@@ -135,7 +164,7 @@ class CommandQueue:
         Returns:
             ExecutionResponse: Response containing
         """
-        response = ProcessResponse()
+        response = QueueProcessResponse(command_log=[])
         while len(self._queue) > 0:
             if response.reached_max_iterations:
                 break
