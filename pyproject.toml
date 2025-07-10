@@ -5,3 +5,13 @@ description = "Type-safe command pattern implementation"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = []
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.1",
+    "pytest-cov>=6.2.1",
+]
+
+
+[tool.pytest.ini_options]
+log_level = "INFO"
