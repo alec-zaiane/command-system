@@ -1,7 +1,7 @@
 [project]
-name = "command_pattern"
+name = "command_system"
 version = "0.1.0"
-description = "Type-safe command pattern implementation"
+description = "Type-safe command pattern implementation in pure Python"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE.md"]
@@ -13,7 +13,7 @@ requires = ["uv_build>=0.7.20,<0.8.0"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
-module-name = "command_pattern"
+module-name = "command_system"
 module-root = ""
 
 [dependency-groups]

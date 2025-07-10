@@ -1,4 +1,4 @@
-from command_pattern import (
+from command_system import (
     CancelResponse,
     CommandQueue,
     DeferResponse,

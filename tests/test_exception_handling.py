@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Optional
 
-from command_pattern import (
+from command_system import (
     Command,
     CommandArgs,
     CommandQueue,
