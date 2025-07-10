@@ -3,7 +3,8 @@ name = "command_pattern"
 version = "0.1.0"
 description = "Type-safe command pattern implementation"
 readme = "README.md"
-license.file = "LICENSE.md"
+license = "MIT"
+license-files = ["LICENSE.md"]
 requires-python = ">=3.13"
 dependencies = []
 
