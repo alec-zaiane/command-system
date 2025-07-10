@@ -119,6 +119,7 @@ class CommandQueue:
                 if not defer_response.should_proceed:
                     response.num_deferrals += 1
                     command.call_on_defer_callbacks(defer_response)
+                    response.command_log.append(command_log_entry)
                     continue
                 # now check if we should cancel
                 cancel_response = command.should_cancel()
@@ -128,6 +129,7 @@ class CommandQueue:
                     command.call_on_cancel_callbacks(cancel_response)
                     command.response.status = ResponseStatus.CANCELED
                     to_remove.append(command)
+                    response.command_log.append(command_log_entry)
                     continue
                 # finally, execute the command
                 execution_response = command.execute()
@@ -166,7 +168,8 @@ class CommandQueue:
         """
         response = QueueProcessResponse(command_log=[])
         while len(self._queue) > 0:
-            if response.reached_max_iterations:
+            if response.num_commands_run >= max_total_iterations:
+                response.reached_max_iterations = True
                 break
             response += self.process_once(max_iterations=max_total_iterations)
         return response
