@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 from .Command import Command, CommandArgs, ResponseType
-from .CommandLifecycle import LifecycleResponse
+from .CommandLifecycle import LifecycleResponse, ExecutionResponse
 from .Response import Response, ResponseStatus
 
 
@@ -132,7 +132,10 @@ class CommandQueue:
                     response.command_log.append(command_log_entry)
                     continue
                 # finally, execute the command
-                execution_response = command.execute()
+                try:
+                    execution_response = command.execute()
+                except Exception as e:
+                    execution_response = ExecutionResponse.failure(str(e))
                 command_log_entry.responses.append(execution_response)
                 command.call_on_execute_callbacks(execution_response)
                 if execution_response.should_proceed:
