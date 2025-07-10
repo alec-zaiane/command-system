@@ -1,11 +1,13 @@
-# Command Pattern
+> Parts of this readme do not render correctly on pypi, see the [repository](https://github.com/alec-zaiane/command-system) for a better experience
+
+# Command System
 A type-safe implementation of the command pattern in Python, designed to handle command execution with a lifecycle that includes deferral and cancellation.
 
 With this package, you can create commands that can be queued and manage their own lifecycle, allowing for interacting with external systems, or building your own systems with complex interactions in a safe, clean, and maintainable way.
 
 
 ## Example Usage
-What does it look like to define a command? Simply subclass `Command`, `CommandArgs`, and optionally `CommandResponse` to create a custom command for your use case.
+Simply subclass `Command`, `CommandArgs`, and optionally `CommandResponse` to create a custom command for your use case.
 
 ```python
 # SayHelloCommand.py
@@ -36,7 +38,7 @@ class SayHelloCommand(Command[SayHelloArgs, SayHelloResponse]):
         return ExecutionResponse.success()
 ```
 
-What does it look like to execute a command? You can use the `CommandQueue` to submit commands, and then `queue.process_once()` or `queue.process_all()` to execute them.
+You can then use the `CommandQueue` to submit commands, and then `queue.process_once()` or `queue.process_all()` to execute them.
 
 ```python
 # main.py

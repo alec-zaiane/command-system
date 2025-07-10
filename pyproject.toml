@@ -7,6 +7,14 @@ license = "MIT"
 license-files = ["LICENSE.md"]
 requires-python = ">=3.13"
 dependencies = []
+keywords = ["command"]
+
+authors = [
+    {name="Alec Zaiane"}
+    ]
+
+[project.urls]
+Repository = "https://github.com/alec-zaiane/command-system/"
 
 [build-system]
 requires = ["uv_build>=0.7.20,<0.8.0"]
@@ -19,6 +27,7 @@ module-root = ""
 [dependency-groups]
 dev = [
     "isort>=6.0.1",
+    "mypy>=1.16.1",
     "pytest>=8.4.1",
     "pytest-cov>=6.2.1",
 ]
@@ -50,6 +59,7 @@ exclude_lines = [
     "import",
     "@abstractmethod",
 ]
+fail_under = 90
 
 [tool.coverage.xml]
 output = "coverage.xml"
