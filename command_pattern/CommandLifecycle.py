@@ -11,7 +11,10 @@ LifecycleResponseType = TypeVar("LifecycleResponseType", bound="LifecycleRespons
 class CallbackRecord(Generic[LifecycleResponseType]):
     """
     Record of a callback's execution.
-    Contains the function that was called, and the error (if any) that occurred during its execution.
+
+    Attributes:
+        callback (Callable[[LifecycleResponseType], None]): The callback function that was executed.
+        error (Optional[Exception]): The exception raised during the callback execution, if any.
     """
 
     callback: Callable[[LifecycleResponseType], None]
@@ -30,6 +33,14 @@ class CallbackRecord(Generic[LifecycleResponseType]):
 
 @dataclass
 class LifecycleResponse:
+    """
+    Base class for lifecycle responses.
+
+    Attributes:
+        should_proceed (bool): Whether the command should proceed to the next lifecycle step.
+        reason (Optional[str]): The reason for failing to proceed, must be set if `should_proceed` is `False`.
+        executed_callbacks (list[CallbackRecord[Self]]): List of callback records for callbacks executed during this response.
+    """
 
     should_proceed: bool
     reason: Optional[str] = None

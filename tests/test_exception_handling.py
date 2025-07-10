@@ -8,7 +8,7 @@ from command_pattern import (
     CancelResponse,
     DeferResponse,
     ExecutionResponse,
-    Response,
+    CommandResponse,
     ResponseStatus,
 )
 
@@ -21,9 +21,9 @@ class RaiseExceptionArgs(CommandArgs):
     message: Optional[str] = None
 
 
-class RaiseExceptionCommand(Command[RaiseExceptionArgs, Response]):
+class RaiseExceptionCommand(Command[RaiseExceptionArgs, CommandResponse]):
     ARGS = RaiseExceptionArgs
-    _response_type = Response
+    _response_type = CommandResponse
 
     def execute(self) -> ExecutionResponse:
         if self.args.fail_when_executing:

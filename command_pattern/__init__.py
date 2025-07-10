@@ -5,12 +5,12 @@ from .CommandLifecycle import (
     ExecutionResponse,
 )
 from .CommandQueue import CommandQueue, QueueProcessResponse
-from .Response import Response, ResponseStatus
+from .CommandResponse import CommandResponse, ResponseStatus
 
 __all__ = [
     "Command",
     "CommandArgs",
-    "Response",
+    "CommandResponse",
     "ResponseStatus",
     "DeferResponse",
     "CancelResponse",

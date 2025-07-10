@@ -11,8 +11,12 @@ class ResponseStatus(Enum):
 
 
 @dataclass
-class Response:
+class CommandResponse:
+    """
+    Base class for command responses.
+    """
+
     status: ResponseStatus
 
     def __repr__(self):  # pragma: no cover
-        return f"Response(status={self.status})"
+        return f"CommandResponse(status={self.status})"

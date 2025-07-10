@@ -3,7 +3,7 @@ from typing import Any, cast
 
 from .Command import Command, CommandArgs, ResponseType
 from .CommandLifecycle import LifecycleResponse, ExecutionResponse
-from .Response import Response, ResponseStatus
+from .CommandResponse import CommandResponse, ResponseStatus
 
 
 @dataclass
@@ -12,12 +12,14 @@ class CommandLogEntry:
     Represents a single command log entry.
 
     Contains the command and the responses from its lifecycle actions.
+
+    Attributes:
+        command (Command[Any, Any]): The command that was processed.
+        responses (list[LifecycleResponse]): List of responses from the lifecycle actions of the command.
     """
 
     command: Command[Any, Any]
-    """The command that was processed"""
     responses: list[LifecycleResponse]
-    """List of responses from the lifecycle actions of the command"""
 
 
 @dataclass
@@ -25,35 +27,37 @@ class QueueProcessResponse:
     """
     Response type of `CommandQueue.process_once()` and `CommandQueue.process_all()`.
 
-    Contains information about said processing
+    Contains information about the processing of commands in the queue.
+
+    Attributes:
+        command_log (list[CommandLogEntry]): List of all commands processed, along with all responses from their lifecycle actions.
+        num_commands_run (int): Total number of commands processed in this run.
+        num_ingested (int): Number of commands that turned from `CREATED` to `PENDING` status.
+        num_deferrals (int): Number of times a command was deferred.
+        num_cancellations (int): Number of times a command was canceled.
+        num_successes (int): Number of times a command executed and succeeded.
+        num_failures (int): Number of times a command executed and failed.
+        reached_max_iterations (bool): True if the maximum number of iterations was reached, false otherwise.
     """
 
     command_log: list[CommandLogEntry]
-    """list of all commands processed, along with all responses from their lifecycle actions"""
     num_commands_run: int = 0
-    """Total number of commands processed in this run"""
     num_ingested: int = 0
-    """Number of commands that turned from `CREATED` to `PENDING` status"""
     num_deferrals: int = 0
-    """Number of times a command was deferred"""
     num_cancellations: int = 0
-    """Number of times a command was canceled"""
     num_successes: int = 0
-    """Number of times a command executed and succeeded"""
     num_failures: int = 0
-    """Number of times a command executed and failed"""
     reached_max_iterations: bool = False
-    """True if the maximum number of iterations was reached, false otherwise."""
 
     def __add__(self, other: "QueueProcessResponse") -> "QueueProcessResponse":
         """
-        Add two ProcessResponse objects together.
+        Add two QueueProcessResponse objects together.
 
         Args:
-            other (ProcessResponse): The other ProcessResponse to add.
+            other (QueueProcessResponse): The other QueueProcessResponse to add.
 
         Returns:
-            ProcessResponse: A new ProcessResponse object with combined values.
+            QueueProcessResponse: A new QueueProcessResponse object with combined values.
         """
         return QueueProcessResponse(
             num_commands_run=self.num_commands_run + other.num_commands_run,
@@ -88,10 +92,13 @@ class CommandQueue:
         """
         Process all commands in the queue a single time.
 
-        ie: if a command is deferred, it will not be processed again until the next call to `process_once()`.
+        If a command is deferred, it will not be processed again until the next call to `process_once()`.
 
-        Args: max_iterations (int, optional): Maximum number of commands to process in one call. Defaults to 1000.
+        Args:
+            max_iterations (int, optional): Maximum number of commands to process in one call. Defaults to 1000.
 
+        Returns:
+            QueueProcessResponse: Response containing details of the processing.
         """
         response = QueueProcessResponse(command_log=[])
         to_remove: list[Command[Any, Any]] = []
@@ -100,7 +107,7 @@ class CommandQueue:
             if response.num_commands_run >= max_iterations:
                 response.reached_max_iterations = True
                 break
-            command = cast(Command[CommandArgs, Response], command)
+            command = cast(Command[CommandArgs, CommandResponse], command)
             response.num_commands_run += 1
             if command.response.status == ResponseStatus.CREATED:
                 response.num_ingested += 1
@@ -157,10 +164,10 @@ class CommandQueue:
         Process all commands in the queue until either all commands are processed, or the maximum number of iterations is reached.
 
         Args:
-            max_total_iterations (int, optional): maximum number of times `process_once()` can be run. Defaults to 1000.
+            max_total_iterations (int, optional): Maximum number of times `process_once()` can be run. Defaults to 1000.
 
         Returns:
-            ExecutionResponse: Response containing
+            QueueProcessResponse: Response containing details of the processing.
         """
         response = QueueProcessResponse(command_log=[])
         while len(self._queue) > 0:

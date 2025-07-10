@@ -6,7 +6,7 @@ from command_pattern import (
     CommandArgs,
     CommandQueue,
     ExecutionResponse,
-    Response,
+    CommandResponse,
     ResponseStatus,
 )
 
@@ -17,7 +17,7 @@ class SayHelloArgs(CommandArgs):
 
 
 @dataclass
-class SayHelloResponse(Response):
+class SayHelloResponse(CommandResponse):
     message: str = ""
 
 

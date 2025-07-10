@@ -5,14 +5,14 @@ With this package, you can create commands that can be queued and manage their o
 
 
 ## Example Usage
-What does it look like to define a command? Simply subclass `Command`, `CommandArgs`, and optionally `Response` to create a custom command for your use case.
+What does it look like to define a command? Simply subclass `Command`, `CommandArgs`, and optionally `CommandResponse` to create a custom command for your use case.
 
 ```python
 # SayHelloCommand.py
 from command_pattern import (
     Command,
     CommandArgs,
-    Response,
+    CommandResponse,
     ExecutionResponse,
 )
 from dataclasses import dataclass
@@ -22,7 +22,7 @@ class SayHelloArgs(CommandArgs):
     name: str
 
 @dataclass
-class SayHelloResponse(Response):
+class SayHelloResponse(CommandResponse):
     message: str = ""
 
 class SayHelloCommand(Command[SayHelloArgs, SayHelloResponse]):
@@ -75,7 +75,7 @@ Subclass `CommandArgs` and add any arguments your command needs. This class will
 Subclass `Command` and set the `ARGS` class attribute to the subclass of `CommandArgs` you created. Implement the `execute` method to define the command's behavior.
 - You can also override `should_defer` and `should_cancel` methods to control the command's lifecycle.
 
-Optionally, you can create a custom response class by subclassing `Response` so that your command can return specific type-safe data. If you do this, set the `_response_type` class attribute of your `Command` subclass to your custom response class.
+Optionally, you can create a custom response class by subclassing `CommandResponse` so that your command can return specific type-safe data. If you do this, set the `_response_type` class attribute of your `Command` subclass to your custom response class.
 
 ### Writing your `execute` method
 > [!WARNING]  

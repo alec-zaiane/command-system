@@ -6,7 +6,7 @@ from command_pattern import (
     CommandArgs,
     CommandQueue,
     ExecutionResponse,
-    Response,
+    CommandResponse,
     ResponseStatus,
 )
 
@@ -16,9 +16,9 @@ class RunFunctionArgs(CommandArgs):
     function: Optional[Callable[[], None]] = None
 
 
-class RunFunctionCommand(Command[RunFunctionArgs, Response]):
+class RunFunctionCommand(Command[RunFunctionArgs, CommandResponse]):
     ARGS = RunFunctionArgs
-    _response_type = Response
+    _response_type = CommandResponse
 
     def execute(self) -> ExecutionResponse:
         if self.args.function is not None:
@@ -29,7 +29,7 @@ class RunFunctionCommand(Command[RunFunctionArgs, Response]):
 def test_max_iterations_process_once():
     # Test max iterations with queue.process_once()
     queue = CommandQueue()
-    responses: list[Response] = []
+    responses: list[CommandResponse] = []
     for _ in range(101):
         responses.append(queue.submit(RunFunctionCommand(RunFunctionCommand.ARGS())))
 
@@ -44,7 +44,7 @@ def test_max_iterations_process_once():
 def test_max_iterations_process_all():
     # Test max iterations with queue.process_all()
     queue = CommandQueue()
-    responses: list[Response] = []
+    responses: list[CommandResponse] = []
 
     def add_to_queue():
         # Add a dummy command to the queue

@@ -9,7 +9,7 @@ from .CommandLifecycle import (
     CallbackRecord,
     LifecycleResponse,
 )
-from .Response import Response, ResponseStatus
+from .CommandResponse import CommandResponse, ResponseStatus
 
 
 @dataclass
@@ -18,7 +18,7 @@ class CommandArgs:
 
 
 ArgsType = TypeVar("ArgsType", bound=CommandArgs)
-ResponseType = TypeVar("ResponseType", bound=Response)
+ResponseType = TypeVar("ResponseType", bound=CommandResponse)
 
 _LifecycleResponseType = TypeVar("_LifecycleResponseType", bound="LifecycleResponse")
 
@@ -42,9 +42,11 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
         return self._args
 
     def _init_response(self) -> ResponseType:
-        """Initialize the response object. Subclasses may want to override this if their response has specific initialization logic.
+        """
+        Initialize the response object for the command.
 
-        **Otherwise, simply declare `_response_type` as a class variable and it will be automatically initialized, no need to override this**
+        Subclasses may override this method if their response requires specific initialization logic.
+        Otherwise, simply declare `_response_type` as a class variable, and it will be automatically initialized.
 
         Returns:
             ResponseType: An instance of the response type for this command.
@@ -55,7 +57,7 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
         """
         Determine if the command should be deferred.
 
-        By default, commands do not defer. Subclasses can override this if they would like.
+        By default, commands do not defer. Subclasses can override this method to provide custom deferral logic.
 
         Returns:
             DeferResponse: A response indicating whether to defer the command execution.
@@ -66,7 +68,7 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
         """
         Determine if the command should be canceled.
 
-        By default, commands do not cancel. Subclasses can override this if they would like.
+        By default, commands do not cancel. Subclasses can override this method to provide custom cancellation logic.
 
         Returns:
             CancelResponse: A response indicating whether to cancel the command execution.
@@ -78,10 +80,11 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
         """
         Execute the command.
 
-        Subclasses must implement this to perform the actual command logic.
+        Subclasses must implement this method to perform the actual command logic.
 
         Returns:
-            ExecutionResponse: A response indicating the status/result of the command execution. **Do not put your payload in the ExecutionResponse**, use a custom `self.response` class instead.
+            ExecutionResponse: A response indicating the status/result of the command execution.
+            **Do not put your payload in the ExecutionResponse**; use a custom `self.response` class instead.
         """
         raise NotImplementedError("Subclasses must implement the execute method.")
 
@@ -90,6 +93,17 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
     def _call_single_callback(
         self, callback: Callable[[_LifecycleResponseType], None], response: _LifecycleResponseType
     ) -> None:
+        """
+        [Private, do not override]
+
+        Call a single callback with the given response.
+
+        This method ensures that the callback is executed safely, and any exceptions raised are recorded.
+
+        Args:
+            callback (Callable[[_LifecycleResponseType], None]): The callback function to be called.
+            response (_LifecycleResponseType): The response to pass to the callback.
+        """
         try:
             callback(response)
             response.executed_callbacks.append(CallbackRecord(callback=callback, error=None))
@@ -101,7 +115,7 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
         """
         Add a callback to be called when the command is deferred.
 
-        **It will only be called if `should_defer()` returns `DeferResponse.defer()`**
+        The callback will only be called if `should_defer()` returns `DeferResponse.defer()`.
 
         Args:
             callback (Callable[[DeferResponse], None]): The callback function to be called.
@@ -123,7 +137,7 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
         """
         Add a callback to be called when the command is canceled.
 
-        **It will only be called if `should_cancel()` returns `CancelResponse.cancel()`**
+        The callback will only be called if `should_cancel()` returns `CancelResponse.cancel()`.
 
         Args:
             callback (Callable[[CancelResponse], None]): The callback function to be called.
@@ -145,7 +159,8 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
         """
         Add a callback to be called when the command is executed.
 
-        **Will always be called after `execute()` is called, regardless of the result**
+        The callback will always be called after `execute()` is called, regardless of the result.
+
         Args:
             callback (Callable[[ExecutionResponse], None]): The callback function to be called.
         """
@@ -154,6 +169,7 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
     def call_on_execute_callbacks(self, response: ExecutionResponse) -> None:
         """
         Call all registered on-execute callbacks with the given response.
+
         Args:
             response (ExecutionResponse): The response to pass to the callbacks.
         """

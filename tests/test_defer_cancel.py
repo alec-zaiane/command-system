@@ -8,7 +8,7 @@ from command_pattern import (
     CommandQueue,
     DeferResponse,
     ExecutionResponse,
-    Response,
+    CommandResponse,
     ResponseStatus,
 )
 
@@ -25,7 +25,7 @@ class WaitToHelloArgs(CommandArgs):
 
 
 @dataclass
-class WaitToHelloResponse(Response):
+class WaitToHelloResponse(CommandResponse):
     message: str = ""
 
 
