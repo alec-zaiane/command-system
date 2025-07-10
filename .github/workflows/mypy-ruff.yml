@@ -21,7 +21,7 @@ jobs:
         uv sync --locked --all-extras --dev
     - name: Run mypy
       run: |
-        poetry run mypy command_system
+        uv run mypy command_system
   lint-check:
     name: ruff linting
     runs-on: ubuntu-latest
