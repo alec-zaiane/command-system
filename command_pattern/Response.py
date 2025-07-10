@@ -15,5 +15,5 @@ class ResponseStatus(Enum):
 class Response:
     status: ResponseStatus
 
-    def __repr__(self):
+    def __repr__(self):  # pragma: no cover
         return f"Response(status={self.status})"
