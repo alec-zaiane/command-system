@@ -1,4 +1,55 @@
+# Command Pattern
+A type-safe implementation of the command pattern in Python, designed to handle command execution with a lifecycle that includes deferral and cancellation.
 
+With this package, you can create commands that can be queued and manage their own lifecycle, allowing for interacting with external systems, or building your own systems with complex interactions in a safe, clean, and maintainable way.
+
+
+## Example Usage
+What does it look like to define a command? Simply subclass `Command`, `CommandArgs`, and optionally `Response` to create a custom command for your use case.
+
+```python
+# SayHelloCommand.py
+from command_pattern import (
+    Command,
+    CommandArgs,
+    Response,
+    ExecutionResponse,
+)
+from dataclasses import dataclass
+
+@dataclass
+class SayHelloArgs(CommandArgs):
+    name: str
+
+@dataclass
+class SayHelloResponse(Response):
+    message: str = ""
+
+class SayHelloCommand(Command[SayHelloArgs, SayHelloResponse]):
+    ARGS = SayHelloArgs
+    _response_type = SayHelloResponse
+
+    def execute(self) -> ExecutionResponse:
+        if not self.args.name:
+            return ExecutionResponse.failure("Name cannot be empty.")
+        self.response.message = f"Hello, {self.args.name}!"
+        return ExecutionResponse.success()
+```
+
+What does it look like to execute a command? You can use the `CommandQueue` to submit commands, and then `queue.process_once()` or `queue.process_all()` to execute them.
+
+```python
+# main.py
+from command_pattern import CommandQueue
+from SayHelloCommand import SayHelloCommand, SayHelloArgs
+
+queue = CommandQueue()
+response = queue.submit(SayHelloCommand(SayHelloArgs(name="Alice")))
+print(response.status) # Pending
+queue.process_once()
+print(response.status) # Completed
+print(response.message) # Hello, Alice!
+```
 
 ## Command Lifecycle
 ```mermaid
@@ -31,37 +82,8 @@ Optionally, you can create a custom response class by subclassing `Response` so 
 > Your `execute` method should not return your custom response class directly. 
 > The `self.response` attribute is automatically set to an instance of your custom response class, which you should *modify* instead. Then, return an `ExecutionResponse` instance to indicate the command's success or failure. 
 
-```python
-from command_pattern import (
-    Command,
-    CommandArgs,
-    Response,
-    ExecutionResponse,
-    CommandQueue,
-    ResponseStatus,
-)
-from dataclasses import dataclass
-from typing import Optional
+### Writing `should_defer` and `should_cancel` methods
+These methods can be overridden to control the command's lifecycle. They must return a `DeferResponse` or `CancelResponse` instance, respectively. You can use them to set conditions for deferring or canceling the command.
 
-
-@dataclass
-class SayHelloArgs(CommandArgs):
-    name: Optional[str]
-
-
-@dataclass
-class SayHelloResponse(Response):
-    message: str = ""
-
-
-class SayHelloCommand(Command[SayHelloArgs, SayHelloResponse]):
-    ARGS = SayHelloArgs
-    _response_type = SayHelloResponse
-
-    def execute(self) -> ExecutionResponse:
-        if self.args.name is None:
-            return ExecutionResponse.failure("Cannot say hello to no one.")
-        self.response.message = f"Hello, {self.args.name}!"
-        return ExecutionResponse.success()
-```
-    
+### Complex Command example
+for an example of deferring and canceling commands, see the [tests/test_defer_cancel.py](tests/test_defer_cancel.py) file.
