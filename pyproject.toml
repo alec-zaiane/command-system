@@ -1,10 +1,19 @@
 [project]
-name = "command-pattern"
+name = "command_pattern"
 version = "0.1.0"
 description = "Type-safe command pattern implementation"
 readme = "README.md"
+license.file = "LICENSE.md"
 requires-python = ">=3.13"
 dependencies = []
+
+[build-system]
+requires = ["uv_build>=0.7.20,<0.8.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "command_pattern"
+module-root = ""
 
 [dependency-groups]
 dev = [
@@ -13,5 +22,26 @@ dev = [
 ]
 
 
+
 [tool.pytest.ini_options]
 log_level = "INFO"
+
+[tool.coverage.run]
+branch = true
+omit = [
+    "test_*",
+]
+
+[tool.coverage.report]
+precision = 2
+skip_covered = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "from .* import",
+    "import",
+    "@abstractmethod",
+]
+
+[tool.coverage.xml]
+output = "coverage.xml"
