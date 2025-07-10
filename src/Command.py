@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Generic, TypeVar, Type
+from typing import Generic, TypeVar, Type, final, Callable
 
 from Response import Response, ResponseStatus
 from CommandLifecycle import DeferResponse, CancelResponse, ExecutionResponse
@@ -16,11 +16,22 @@ ResponseType = TypeVar("ResponseType", bound=Response)
 
 
 class Command(ABC, Generic[ArgsType, ResponseType]):
+    ARGS: Type[ArgsType]
     _response_type: Type[ResponseType]
 
     def __init__(self, args: ArgsType):
-        self.args = args
+        self._args = args
         self.response = self._init_response()
+
+        # callbacks
+        self._on_defer_callbacks: list[Callable[[DeferResponse], None]] = []
+        self._on_cancel_callbacks: list[Callable[[CancelResponse], None]] = []
+        self._on_execute_callbacks: list[Callable[[ExecutionResponse], None]] = []
+
+    @property
+    def args(self) -> ArgsType:
+        """Get the command arguments."""
+        return self._args
 
     def _init_response(self) -> ResponseType:
         """Initialize the response object. Subclasses may want to override this if their response has specific initialization logic.
@@ -65,3 +76,72 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
             ExecutionResponse: A response indicating the status/result of the command execution. **Do not put your payload in the ExecutionResponse**, use a custom `self.response` class instead.
         """
         raise NotImplementedError("Subclasses must implement the execute method.")
+
+    # Callbacks
+    @final
+    def add_on_defer_listener(self, callback: Callable[[DeferResponse], None]) -> None:
+        """
+        Add a callback to be called when the command is deferred.
+
+        **It will only be called if `should_defer()` returns `DeferResponse.defer()`**
+
+        Args:
+            callback (Callable[[DeferResponse], None]): The callback function to be called.
+        """
+        self._on_defer_callbacks.append(callback)
+
+    def call_on_defer_callbacks(self, response: DeferResponse) -> None:
+        """
+        Call all registered on-defer callbacks with the given response.
+
+        Args:
+            response (DeferResponse): The response to pass to the callbacks.
+        """
+        for callback in self._on_defer_callbacks:
+            callback(response)
+
+    @final
+    def add_on_cancel_listener(
+        self, callback: Callable[[CancelResponse], None]
+    ) -> None:
+        """
+        Add a callback to be called when the command is canceled.
+
+        **It will only be called if `should_cancel()` returns `CancelResponse.cancel()`**
+
+        Args:
+            callback (Callable[[CancelResponse], None]): The callback function to be called.
+        """
+        self._on_cancel_callbacks.append(callback)
+
+    def call_on_cancel_callbacks(self, response: CancelResponse) -> None:
+        """
+        Call all registered on-cancel callbacks with the given response.
+
+        Args:
+            response (CancelResponse): The response to pass to the callbacks.
+        """
+        for callback in self._on_cancel_callbacks:
+            callback(response)
+
+    @final
+    def add_on_execute_listener(
+        self, callback: Callable[[ExecutionResponse], None]
+    ) -> None:
+        """
+        Add a callback to be called when the command is executed.
+
+        **Will always be called after `execute()` is called, regardless of the result**
+        Args:
+            callback (Callable[[ExecutionResponse], None]): The callback function to be called.
+        """
+        self._on_execute_callbacks.append(callback)
+
+    def call_on_execute_callbacks(self, response: ExecutionResponse) -> None:
+        """
+        Call all registered on-execute callbacks with the given response.
+        Args:
+            response (ExecutionResponse): The response to pass to the callbacks.
+        """
+        for callback in self._on_execute_callbacks:
+            callback(response)

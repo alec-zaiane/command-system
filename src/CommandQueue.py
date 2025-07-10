@@ -1,0 +1,154 @@
+from Command import Command, CommandArgs, ResponseType
+from Response import Response
+from CommandLifecycle import ResponseStatus
+from typing import Any, cast
+from dataclasses import dataclass
+
+
+@dataclass
+class ProcessResponse:
+    """
+    Response type of `CommandQueue.process_once()` and `CommandQueue.process_all()`.
+
+    Contains information about said processing
+    """
+
+    num_commands_run: int = 0
+    """Total number of commands processed in this run"""
+    num_ingested: int = 0
+    """Number of commands that turned from `CREATED` to `PENDING` status"""
+    num_deferrals: int = 0
+    """Number of times a command was deferred"""
+    num_cancellations: int = 0
+    """Number of times a command was canceled"""
+    num_successes: int = 0
+    """Number of times a command executed and succeeded"""
+    num_failures: int = 0
+    """Number of times a command executed and failed"""
+    reached_max_iterations: bool = False
+    """True if the maximum number of iterations was reached, false otherwise."""
+
+    def __add__(self, other: "ProcessResponse") -> "ProcessResponse":
+        """
+        Add two ProcessResponse objects together.
+
+        Args:
+            other (ProcessResponse): The other ProcessResponse to add.
+
+        Returns:
+            ProcessResponse: A new ProcessResponse object with combined values.
+        """
+        return ProcessResponse(
+            num_commands_run=self.num_commands_run + other.num_commands_run,
+            num_ingested=self.num_ingested + other.num_ingested,
+            num_deferrals=self.num_deferrals + other.num_deferrals,
+            num_cancellations=self.num_cancellations + other.num_cancellations,
+            num_successes=self.num_successes + other.num_successes,
+            num_failures=self.num_failures + other.num_failures,
+            reached_max_iterations=self.reached_max_iterations
+            or other.reached_max_iterations,
+        )
+
+
+class CommandQueue:
+    def __init__(self):
+        self._queue: list[Command[Any, Any]] = []
+
+    def submit(self, command: Command[Any, ResponseType]) -> ResponseType:
+        """
+        Submit a command to the queue.
+
+        Args:
+            command (Command[ArgsType, ResponseType]): The command to be submitted.
+
+        Returns:
+            ResponseType: The response object associated with the command.
+        """
+        self._queue.append(command)
+        return command.response
+
+    def process_once(self, max_iterations: int = 1000) -> ProcessResponse:
+        """
+        Process all commands in the queue a single time.
+
+        ie: if a command is deferred, it will not be processed again until the next call to `process_once()`.
+
+        Args: max_iterations (int, optional): Maximum number of commands to process in one call. Defaults to 1000.
+
+        """
+        response = ProcessResponse()
+        to_remove: list[Command[Any, Any]] = []
+        for command in self._queue:
+            if response.num_commands_run >= max_iterations:
+                response.reached_max_iterations = True
+                break
+            command = cast(Command[CommandArgs, Response], command)
+            response.num_commands_run += 1
+            if command.response.status == ResponseStatus.CREATED:
+                response.num_ingested += 1
+                command.response.status = ResponseStatus.PENDING
+            if command.response.status == ResponseStatus.PENDING:
+                # check if we should defer
+                defer_response = command.should_defer()
+                if not defer_response.should_proceed:
+                    response.num_deferrals += 1
+                    command.call_on_defer_callbacks(defer_response)
+                    continue
+                # now check if we should cancel
+                cancel_response = command.should_cancel()
+                if not cancel_response.should_proceed:
+                    response.num_cancellations += 1
+                    command.call_on_cancel_callbacks(cancel_response)
+                    command.response.status = ResponseStatus.CANCELED
+                    to_remove.append(command)
+                    continue
+                # finally, execute the command
+                execution_response = command.execute()
+                command.call_on_execute_callbacks(execution_response)
+                if execution_response.should_proceed:
+                    command.response.status = ResponseStatus.COMPLETED
+                    response.num_successes += 1
+                else:
+                    command.response.status = ResponseStatus.FAILED
+                    response.num_failures += 1
+                to_remove.append(command)
+            if command.response.status in (
+                ResponseStatus.CANCELED,
+                ResponseStatus.COMPLETED,
+                ResponseStatus.FAILED,
+            ):
+                # maybe it was already processed, and accidentally re-added to the queue
+                to_remove.append(command)
+        # remove all processed commands
+        for command in to_remove:
+            if command in self._queue:
+                self._queue.remove(command)
+        return response
+
+    def process_all(self, max_total_iterations: int = 1000) -> ProcessResponse:
+        """
+        Process all commands in the queue until either all commands are processed, or the maximum number of iterations is reached.
+
+        Args:
+            max_total_iterations (int, optional): maximum number of times `process_once()` can be run. Defaults to 1000.
+
+        Returns:
+            ExecutionResponse: Response containing
+        """
+        response = ProcessResponse()
+        while len(self._queue) > 0:
+            if response.reached_max_iterations:
+                break
+            response += self.process_once(max_iterations=max_total_iterations)
+        return response
+
+    # Magic methods
+
+    def __len__(self) -> int:
+        """
+        Get the number of commands in the queue.
+
+        Returns:
+            int: The number of commands in the queue.
+        """
+        return len(self._queue)
