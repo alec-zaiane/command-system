@@ -1,13 +1,41 @@
 """Helper classes for command lifecycle management."""
 
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import Optional, Self, Callable, Generic, TypeVar, cast
+
+
+LifecycleResponseType = TypeVar("LifecycleResponseType", bound="LifecycleResponse")
+
+
+@dataclass
+class CallbackRecord(Generic[LifecycleResponseType]):
+    """
+    Record of a callback's execution.
+    Contains the function that was called, and the error (if any) that occurred during its execution.
+    """
+
+    callback: Callable[[LifecycleResponseType], None]
+    error: Optional[Exception] = None
+
+    @property
+    def succeeded(self) -> bool:
+        """Check if the callback executed successfully (i.e., no exception was raised)."""
+        return self.error is None
+
+    @property
+    def errored(self) -> bool:
+        """Check if the callback raised an exception."""
+        return self.error is not None
 
 
 @dataclass
 class LifecycleResponse:
+
     should_proceed: bool
     reason: Optional[str] = None
+    executed_callbacks: list[CallbackRecord[Self]] = cast(
+        list[CallbackRecord[Self]], field(default_factory=list)
+    )
 
 
 class DeferResponse(LifecycleResponse):

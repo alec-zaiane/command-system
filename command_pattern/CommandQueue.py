@@ -45,13 +45,6 @@ class QueueProcessResponse:
     reached_max_iterations: bool = False
     """True if the maximum number of iterations was reached, false otherwise."""
 
-    def get_successes(self) -> list[Command[Any, Any]]:
-        output: list[Command[Any, Any]] = []
-        for entry in self.command_log:
-            if entry.command.response.status == ResponseStatus.COMPLETED:
-                output.append(entry.command)
-        return output
-
     def __add__(self, other: "QueueProcessResponse") -> "QueueProcessResponse":
         """
         Add two ProcessResponse objects together.

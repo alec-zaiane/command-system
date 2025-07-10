@@ -2,7 +2,13 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Callable, Generic, Type, TypeVar, final
 
-from .CommandLifecycle import CancelResponse, DeferResponse, ExecutionResponse
+from .CommandLifecycle import (
+    CancelResponse,
+    DeferResponse,
+    ExecutionResponse,
+    CallbackRecord,
+    LifecycleResponse,
+)
 from .Response import Response, ResponseStatus
 
 
@@ -13,6 +19,8 @@ class CommandArgs:
 
 ArgsType = TypeVar("ArgsType", bound=CommandArgs)
 ResponseType = TypeVar("ResponseType", bound=Response)
+
+_LifecycleResponseType = TypeVar("_LifecycleResponseType", bound="LifecycleResponse")
 
 
 class Command(ABC, Generic[ArgsType, ResponseType]):
@@ -79,7 +87,17 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
 
     # Callbacks
     @final
-    def add_on_defer_listener(self, callback: Callable[[DeferResponse], None]) -> None:
+    def _call_single_callback(
+        self, callback: Callable[[_LifecycleResponseType], None], response: _LifecycleResponseType
+    ) -> None:
+        try:
+            callback(response)
+            response.executed_callbacks.append(CallbackRecord(callback=callback, error=None))
+        except Exception as e:
+            response.executed_callbacks.append(CallbackRecord(callback=callback, error=e))
+
+    @final
+    def add_on_defer_callback(self, callback: Callable[[DeferResponse], None]) -> None:
         """
         Add a callback to be called when the command is deferred.
 
@@ -98,10 +116,10 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
             response (DeferResponse): The response to pass to the callbacks.
         """
         for callback in self._on_defer_callbacks:
-            callback(response)
+            self._call_single_callback(callback, response)
 
     @final
-    def add_on_cancel_listener(self, callback: Callable[[CancelResponse], None]) -> None:
+    def add_on_cancel_callback(self, callback: Callable[[CancelResponse], None]) -> None:
         """
         Add a callback to be called when the command is canceled.
 
@@ -120,10 +138,10 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
             response (CancelResponse): The response to pass to the callbacks.
         """
         for callback in self._on_cancel_callbacks:
-            callback(response)
+            self._call_single_callback(callback, response)
 
     @final
-    def add_on_execute_listener(self, callback: Callable[[ExecutionResponse], None]) -> None:
+    def add_on_execute_callback(self, callback: Callable[[ExecutionResponse], None]) -> None:
         """
         Add a callback to be called when the command is executed.
 
@@ -140,4 +158,4 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
             response (ExecutionResponse): The response to pass to the callbacks.
         """
         for callback in self._on_execute_callbacks:
-            callback(response)
+            self._call_single_callback(callback, response)
