@@ -1,7 +1,7 @@
 """Helper classes for command lifecycle management."""
 
-from typing import Optional
 from dataclasses import dataclass
+from typing import Optional
 
 
 @dataclass

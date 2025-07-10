@@ -1,13 +1,14 @@
+from dataclasses import dataclass
+from typing import Optional
+
 from command_pattern import (
     Command,
     CommandArgs,
-    Response,
-    ExecutionResponse,
     CommandQueue,
+    ExecutionResponse,
+    Response,
     ResponseStatus,
 )
-from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
@@ -55,7 +56,4 @@ def test_say_hello_failure():
     assert response.status == ResponseStatus.CREATED
     queue_response = queue.process_once()
     assert response.status == ResponseStatus.FAILED
-    assert (
-        queue_response.command_log[-1].responses[-1].reason
-        == "Cannot say hello to no one."
-    )
+    assert queue_response.command_log[-1].responses[-1].reason == "Cannot say hello to no one."

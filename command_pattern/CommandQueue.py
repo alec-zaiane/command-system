@@ -1,8 +1,9 @@
-from .Command import Command, CommandArgs, ResponseType
-from .Response import Response, ResponseStatus
-from .CommandLifecycle import LifecycleResponse
-from typing import Any, cast
 from dataclasses import dataclass
+from typing import Any, cast
+
+from .Command import Command, CommandArgs, ResponseType
+from .CommandLifecycle import LifecycleResponse
+from .Response import Response, ResponseStatus
 
 
 @dataclass
@@ -68,8 +69,7 @@ class QueueProcessResponse:
             num_cancellations=self.num_cancellations + other.num_cancellations,
             num_successes=self.num_successes + other.num_successes,
             num_failures=self.num_failures + other.num_failures,
-            reached_max_iterations=self.reached_max_iterations
-            or other.reached_max_iterations,
+            reached_max_iterations=self.reached_max_iterations or other.reached_max_iterations,
             command_log=self.command_log + other.command_log,
         )
 

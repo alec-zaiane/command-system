@@ -18,11 +18,18 @@ module-root = ""
 
 [dependency-groups]
 dev = [
+    "isort>=6.0.1",
     "pytest>=8.4.1",
     "pytest-cov>=6.2.1",
 ]
 
+[tool.black]
+line-length = 100
+target-version = ['py313']
 
+[tool.isort]
+profile = "black"
+include_trailing_comma = true
 
 [tool.pytest.ini_options]
 log_level = "INFO"

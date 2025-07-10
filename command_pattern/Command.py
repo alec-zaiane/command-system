@@ -1,9 +1,9 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Generic, TypeVar, Type, final, Callable
+from typing import Callable, Generic, Type, TypeVar, final
 
+from .CommandLifecycle import CancelResponse, DeferResponse, ExecutionResponse
 from .Response import Response, ResponseStatus
-from .CommandLifecycle import DeferResponse, CancelResponse, ExecutionResponse
 
 
 @dataclass
@@ -101,9 +101,7 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
             callback(response)
 
     @final
-    def add_on_cancel_listener(
-        self, callback: Callable[[CancelResponse], None]
-    ) -> None:
+    def add_on_cancel_listener(self, callback: Callable[[CancelResponse], None]) -> None:
         """
         Add a callback to be called when the command is canceled.
 
@@ -125,9 +123,7 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
             callback(response)
 
     @final
-    def add_on_execute_listener(
-        self, callback: Callable[[ExecutionResponse], None]
-    ) -> None:
+    def add_on_execute_listener(self, callback: Callable[[ExecutionResponse], None]) -> None:
         """
         Add a callback to be called when the command is executed.
 

@@ -1,15 +1,16 @@
-from command_pattern import (
-    Command,
-    CommandArgs,
-    Response,
-    ExecutionResponse,
-    CommandQueue,
-    ResponseStatus,
-    DeferResponse,
-    CancelResponse,
-)
 from dataclasses import dataclass
 from typing import Optional
+
+from command_pattern import (
+    CancelResponse,
+    Command,
+    CommandArgs,
+    CommandQueue,
+    DeferResponse,
+    ExecutionResponse,
+    Response,
+    ResponseStatus,
+)
 
 
 @dataclass
@@ -33,10 +34,7 @@ class WaitToHelloCommand(Command[WaitToHelloArgs, WaitToHelloResponse]):
     _response_type = WaitToHelloResponse
 
     def should_defer(self) -> DeferResponse:
-        if (
-            self.args.external_system.name is None
-            and not self.args.external_system.cancel
-        ):
+        if self.args.external_system.name is None and not self.args.external_system.cancel:
             return DeferResponse.defer("Name is required to say hello.")
         return DeferResponse.proceed()
 
@@ -53,16 +51,11 @@ class WaitToHelloCommand(Command[WaitToHelloArgs, WaitToHelloResponse]):
 def test_wait_to_hello_defer():
     queue = CommandQueue()
     external_system = ExternalSystem(name=None)
-    response = queue.submit(
-        WaitToHelloCommand(WaitToHelloCommand.ARGS(external_system))
-    )
+    response = queue.submit(WaitToHelloCommand(WaitToHelloCommand.ARGS(external_system)))
     # Since name is None, the command should defer and the reason should be set inside the queue response
     queue_response = queue.process_once()
     assert response.status == ResponseStatus.PENDING
-    assert (
-        queue_response.command_log[-1].responses[-1].reason
-        == "Name is required to say hello."
-    )
+    assert queue_response.command_log[-1].responses[-1].reason == "Name is required to say hello."
     # Name is still none; command should still be deferring
     queue.process_once()
     assert response.status == ResponseStatus.PENDING
@@ -76,9 +69,7 @@ def test_wait_to_hello_defer():
 def test_wait_to_hello_cancel():
     queue = CommandQueue()
     external_system = ExternalSystem(name=None)
-    response = queue.submit(
-        WaitToHelloCommand(WaitToHelloCommand.ARGS(external_system))
-    )
+    response = queue.submit(WaitToHelloCommand(WaitToHelloCommand.ARGS(external_system)))
     # Request a cancellation as the external system
     external_system.cancel = True
     queue_response = queue.process_all()
