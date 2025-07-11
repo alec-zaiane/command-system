@@ -11,7 +11,7 @@ Simply subclass `Command`, `CommandArgs`, and optionally `CommandResponse` to cr
 
 ```python
 # SayHelloCommand.py
-from command_pattern import (
+from command_system import (
     Command,
     CommandArgs,
     CommandResponse,
@@ -42,7 +42,7 @@ You can then use the `CommandQueue` to submit commands, and then `queue.process_
 
 ```python
 # main.py
-from command_pattern import CommandQueue
+from command_system import CommandQueue
 from SayHelloCommand import SayHelloCommand, SayHelloArgs
 
 queue = CommandQueue()

@@ -1,14 +1,15 @@
-name: run pytest
-
-on:
-  pull_request:
-    branches: [ "**" ]
+name: publish to PyPI
+on: 
+  push:
+    branches: [ "main" ]
 
 jobs:
-  pytest:
-    name: pytest
+  publish:
+    name: Publish to PyPI
     runs-on: ubuntu-latest
-
+    environment:
+      name: pypi
+      url: https://pypi.org/project/command-system/
     steps:
     - uses: actions/checkout@v4
     - uses: astral-sh/setup-uv@v6
@@ -18,7 +19,8 @@ jobs:
         python-version-file: '.python-version'
     - name: Install dependencies
       run: | 
-        uv sync --locked --all-extras --dev
-    - name: Run pytest
+        uv sync --locked --all-extras
+    - name: Publish to PyPI
       run: |
-        uv run pytest --cov
+        uv publish 
+    
