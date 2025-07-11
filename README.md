@@ -56,9 +56,9 @@ print(response.message) # Hello, Alice!
 ## Command Lifecycle
 ```mermaid
 flowchart TD
-    A[ResponseStatus.CREATED] -->|"queue.submit(command)"| B[responseStatus.PENDING]
+    A[create command] -->|"queue.submit(command)"| B[responseStatus.CREATED]
     B --> C{"command.should_defer()"}
-    C -->|"DeferResponse.defer()"| W["Waiting for queue manager to run again"]
+    C -->|"DeferResponse.defer()"| W["responseStatus.PENDING"]
     W --> C
     C -->|"DeferResponse.proceed()"| D{"command.should_cancel()"}
     D -->|"CancelResponse.cancel()"| E[ResponseStatus.CANCELED]
