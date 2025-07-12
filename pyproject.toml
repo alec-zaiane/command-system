@@ -5,7 +5,7 @@ description = "Type-safe command pattern implementation in pure Python"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE.md"]
-requires-python = ">=3.13"
+requires-python = ">=3.11"
 dependencies = []
 keywords = ["command"]
 
