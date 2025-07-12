@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Callable, Generic, Type, TypeVar, final, Optional, Any
+from typing import Any, Callable, Generic, Optional, Type, TypeVar, final
 
 from .CommandLifecycle import (
     CallbackRecord,

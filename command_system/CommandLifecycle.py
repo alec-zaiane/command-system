@@ -1,8 +1,7 @@
 """Helper classes for command lifecycle management."""
 
 from dataclasses import dataclass, field
-from typing import Optional, Self, Callable, Generic, TypeVar, cast
-
+from typing import Callable, Generic, Optional, Self, TypeVar, cast
 
 LifecycleResponseType = TypeVar("LifecycleResponseType", bound="LifecycleResponse")
 

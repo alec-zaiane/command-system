@@ -8,12 +8,11 @@ from .CommandLifecycle import (
 from .CommandQueue import CommandQueue, QueueProcessResponse
 from .CommandResponse import CommandResponse, ResponseStatus
 from .Dependencies import (
-    DependencyEntry,
-    DependencyCheckResponse,
-    ReasonByDependencyCheck,
     DependencyAction,
+    DependencyCheckResponse,
+    DependencyEntry,
+    ReasonByDependencyCheck,
 )
-
 
 __all__ = [
     # Basic command components

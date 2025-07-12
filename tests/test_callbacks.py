@@ -1,13 +1,13 @@
+from test_defer_cancel import ExternalSystem, WaitToHelloCommand
+
 from command_system import (
     CancelResponse,
     CommandQueue,
     DeferResponse,
     ExecutionResponse,
-    ResponseStatus,
     ReasonByCommandMethod,
+    ResponseStatus,
 )
-
-from test_defer_cancel import WaitToHelloCommand, ExternalSystem
 
 
 def test_defer_callback():

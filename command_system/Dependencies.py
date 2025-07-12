@@ -1,9 +1,9 @@
-from enum import Enum
 from dataclasses import dataclass, field
+from enum import Enum
+from typing import TYPE_CHECKING, Any, Literal, Optional, cast
 
-from typing import TYPE_CHECKING, Literal, cast, Optional, Any
-from .CommandResponse import ResponseStatus
 from .CommandLifecycle import LifecycleResponseReason
+from .CommandResponse import ResponseStatus
 
 if TYPE_CHECKING:
     from Command import Command, CommandArgs, CommandResponse

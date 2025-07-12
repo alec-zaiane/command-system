@@ -1,21 +1,20 @@
 from dataclasses import dataclass
-from typing import Any, cast, Optional
+from logging import getLogger
+from typing import Any, Optional, cast
 
 from .Command import Command, CommandArgs, ResponseType
 from .CommandLifecycle import (
-    LifecycleResponse,
-    ExecutionResponse,
-    DeferResponse,
     CancelResponse,
+    DeferResponse,
+    ExecutionResponse,
+    LifecycleResponse,
 )
 from .CommandResponse import CommandResponse, ResponseStatus
 from .Dependencies import (
-    DependencyCheckResponse,
     DependencyAction,
+    DependencyCheckResponse,
     ReasonByDependencyCheck,
 )
-
-from logging import getLogger
 
 
 @dataclass
