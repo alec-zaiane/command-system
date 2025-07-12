@@ -1,9 +1,17 @@
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any, cast, Optional
 
 from .Command import Command, CommandArgs, ResponseType
 from .CommandLifecycle import LifecycleResponse, ExecutionResponse
 from .CommandResponse import CommandResponse, ResponseStatus
+from .Dependencies import (
+    DependencyCheckResponse,
+    DependencyAction,
+    DeferResponseViaDependency,
+    CancelResponseViaDependency,
+)
+
+from logging import getLogger
 
 
 @dataclass
@@ -16,10 +24,12 @@ class CommandLogEntry:
     Attributes:
         command (Command[Any, Any]): The command that was processed.
         responses (list[LifecycleResponse]): List of responses from the lifecycle actions of the command.
+        dependency_response (DependencyCheckResponse): The response from the dependency check of the command.
     """
 
     command: Command[Any, Any]
     responses: list[LifecycleResponse]
+    dependency_response: Optional[DependencyCheckResponse]
 
 
 @dataclass
@@ -60,13 +70,15 @@ class QueueProcessResponse:
             QueueProcessResponse: A new QueueProcessResponse object with combined values.
         """
         return QueueProcessResponse(
-            num_commands_processed=self.num_commands_processed + other.num_commands_processed,
+            num_commands_processed=self.num_commands_processed
+            + other.num_commands_processed,
             num_ingested=self.num_ingested + other.num_ingested,
             num_deferrals=self.num_deferrals + other.num_deferrals,
             num_cancellations=self.num_cancellations + other.num_cancellations,
             num_successes=self.num_successes + other.num_successes,
             num_failures=self.num_failures + other.num_failures,
-            reached_max_iterations=self.reached_max_iterations or other.reached_max_iterations,
+            reached_max_iterations=self.reached_max_iterations
+            or other.reached_max_iterations,
             command_log=self.command_log + other.command_log,
         )
 
@@ -74,6 +86,9 @@ class QueueProcessResponse:
 class CommandQueue:
     def __init__(self):
         self._queue: list[Command[Any, Any]] = []
+        self.logger = getLogger(
+            f"{self.__class__.__module__}.{self.__class__.__name__}@{id(self)}"
+        )
 
     def submit(self, command: Command[Any, ResponseType]) -> ResponseType:
         """
@@ -103,7 +118,9 @@ class CommandQueue:
         response = QueueProcessResponse(command_log=[])
         to_remove: list[Command[Any, Any]] = []
         for command in self._queue:
-            command_log_entry = CommandLogEntry(command=command, responses=[])
+            command_log_entry = CommandLogEntry(
+                command=command, responses=[], dependency_response=None
+            )
             if response.num_commands_processed >= max_iterations:
                 response.reached_max_iterations = True
                 break
@@ -113,6 +130,22 @@ class CommandQueue:
                 response.num_ingested += 1
                 command.response.status = ResponseStatus.PENDING
             if command.response.status == ResponseStatus.PENDING:
+                # check dependencies first
+                dependency_response = command.check_dependencies()
+                command_log_entry.dependency_response = dependency_response
+                if dependency_response.status == DependencyAction.DEFER:
+                    response.num_deferrals += 1
+                    command.call_on_defer_callbacks(DeferResponseViaDependency())
+                    response.command_log.append(command_log_entry)
+                    continue
+                elif dependency_response.status == DependencyAction.CANCEL:
+                    response.num_cancellations += 1
+                    command.call_on_cancel_callbacks(CancelResponseViaDependency())
+                    command.response.status = ResponseStatus.CANCELED
+                    to_remove.append(command)
+                    response.command_log.append(command_log_entry)
+                    continue
+
                 # check if we should defer
                 defer_response = command.should_defer()
                 command_log_entry.responses.append(defer_response)

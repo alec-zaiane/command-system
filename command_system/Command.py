@@ -3,17 +3,24 @@ from dataclasses import dataclass
 from typing import Callable, Generic, Type, TypeVar, final
 
 from .CommandLifecycle import (
+    CallbackRecord,
     CancelResponse,
     DeferResponse,
     ExecutionResponse,
-    CallbackRecord,
     LifecycleResponse,
 )
 from .CommandResponse import CommandResponse, ResponseStatus
+from .Dependencies import DependencyCheckResponse, DependencyEntry
 
 
 @dataclass
 class CommandArgs:
+    """
+    Arguments for a command / Data supplied to a command.
+
+    The base CommandArgs class is empty, but subclasses can define specific arguments.
+    """
+
     pass
 
 
@@ -36,6 +43,9 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
         self._on_cancel_callbacks: list[Callable[[CancelResponse], None]] = []
         self._on_execute_callbacks: list[Callable[[ExecutionResponse], None]] = []
 
+        # dependencies
+        self._dependencies: list[DependencyEntry] = []
+
     @property
     def args(self) -> ArgsType:
         """Get the command arguments."""
@@ -52,6 +62,25 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
             ResponseType: An instance of the response type for this command.
         """
         return self._response_type(status=ResponseStatus.CREATED)
+
+    @final
+    def check_dependencies(self) -> DependencyCheckResponse:
+        """
+        Check if the command has any dependencies that need to be resolved before execution.
+
+        CANCEL takes precedence over DEFER, and DEFER takes precedence over PROCEED.
+
+        Returns:
+            DependencyCheckResponse: An enum indicating what action should be taken (DEFER, CANCEL, PROCEED). This check will take precedence over `should_defer()` and `should_cancel()`.
+        """
+        output = DependencyCheckResponse.proceed()
+        for dependency in self._dependencies:
+            dependency_response = dependency.evaluate()
+            output.attempt_escalation(
+                dependency_response,
+                f"Dependency {dependency} returned {dependency_response} during evaluation.",
+            )
+        return output
 
     def should_defer(self) -> DeferResponse:
         """
@@ -91,7 +120,9 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
     # Callbacks
     @final
     def _call_single_callback(
-        self, callback: Callable[[_LifecycleResponseType], None], response: _LifecycleResponseType
+        self,
+        callback: Callable[[_LifecycleResponseType], None],
+        response: _LifecycleResponseType,
     ) -> None:
         """
         [Private, do not override]
@@ -106,9 +137,13 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
         """
         try:
             callback(response)
-            response.executed_callbacks.append(CallbackRecord(callback=callback, error=None))
+            response.executed_callbacks.append(
+                CallbackRecord(callback=callback, error=None)
+            )
         except Exception as e:
-            response.executed_callbacks.append(CallbackRecord(callback=callback, error=e))
+            response.executed_callbacks.append(
+                CallbackRecord(callback=callback, error=e)
+            )
 
     @final
     def add_on_defer_callback(self, callback: Callable[[DeferResponse], None]) -> None:
@@ -133,7 +168,9 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
             self._call_single_callback(callback, response)
 
     @final
-    def add_on_cancel_callback(self, callback: Callable[[CancelResponse], None]) -> None:
+    def add_on_cancel_callback(
+        self, callback: Callable[[CancelResponse], None]
+    ) -> None:
         """
         Add a callback to be called when the command is canceled.
 
@@ -155,7 +192,9 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
             self._call_single_callback(callback, response)
 
     @final
-    def add_on_execute_callback(self, callback: Callable[[ExecutionResponse], None]) -> None:
+    def add_on_execute_callback(
+        self, callback: Callable[[ExecutionResponse], None]
+    ) -> None:
         """
         Add a callback to be called when the command is executed.
 
