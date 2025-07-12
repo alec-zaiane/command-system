@@ -1,0 +1,17 @@
+name: Enforce PR to main from dev only
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  main-pr-from-dev-only:
+    name: Ensure PR to main is from dev only
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure PR comes from dev
+        run: |
+          if [[ "${{ github.head_ref }}" != "dev" ]]; then
+            echo "Only dev can be merged into main"
+            exit 1
+          fi
