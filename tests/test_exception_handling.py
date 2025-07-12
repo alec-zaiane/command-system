@@ -2,13 +2,14 @@ from dataclasses import dataclass
 from typing import Optional
 
 from command_system import (
+    CancelResponse,
     Command,
     CommandArgs,
     CommandQueue,
-    CancelResponse,
+    CommandResponse,
     DeferResponse,
     ExecutionResponse,
-    CommandResponse,
+    ReasonByCommandMethod,
     ResponseStatus,
 )
 
@@ -55,7 +56,9 @@ def test_exception_handling():
     assert response.status == ResponseStatus.CREATED
     queue_response = queue.process_once()
     assert response.status == ResponseStatus.FAILED
-    assert queue_response.command_log[-1].responses[-1].reason == "Test exception"
+    assert queue_response.command_log[-1].responses[-1].reason == ReasonByCommandMethod(
+        "Test exception"
+    )
 
 
 def test_defer_callback_exception_handling():

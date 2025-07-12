@@ -1,12 +1,12 @@
 from dataclasses import dataclass
-from typing import Optional, Callable
+from typing import Callable, Optional
 
 from command_system import (
     Command,
     CommandArgs,
     CommandQueue,
-    ExecutionResponse,
     CommandResponse,
+    ExecutionResponse,
     ResponseStatus,
 )
 
