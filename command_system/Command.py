@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Callable, Generic, Type, TypeVar, final, Optional
+from typing import Callable, Generic, Type, TypeVar, final, Optional, Any
 
 from .CommandLifecycle import (
     CallbackRecord,
@@ -34,7 +34,11 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
     ARGS: Type[ArgsType]
     _response_type: Type[ResponseType]
 
-    def __init__(self, args: ArgsType, dependencies: Optional[list[DependencyEntry]] = None):
+    def __init__(
+        self,
+        args: ArgsType,
+        dependencies: "Optional[list[DependencyEntry|Command[Any,Any]]]" = None,
+    ):
         self._args = args
         self.response = self._init_response()
 
@@ -69,18 +73,23 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
             )
         return self._response_type(status=ResponseStatus.CREATED)
 
-    def add_dependency(self, dependency: DependencyEntry) -> None:
+    def add_dependency(self, dependency: "DependencyEntry|Command[Any,Any]") -> None:
         """
         Add a dependency to the command.
 
+        Either provide a Command instance or optionally a DependencyEntry wrapping a Command for more control.
+
         Args:
-            dependency (DependencyEntry): The dependency to be added.
+            dependency (DependencyEntry|Command): The dependency to be added.
         """
+        # TODO allow for passing just a Command and find the DependencyEntry automatically
+        if isinstance(dependency, Command):
+            dependency = DependencyEntry(dependency)
         self._dependencies.append(dependency)
 
     def remove_dependency(self, dependency: DependencyEntry) -> None:
         """
-        Remove a dependency from the command.
+        Remove a dependency from the command. You muist provide the exact DependencyEntry instance, not just a Command.
 
         Raises:
             ValueError: If the dependency is not found in the command's dependencies.

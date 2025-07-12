@@ -117,6 +117,22 @@ def test_failed_dependencies():
     assert check_response.status == DependencyAction.CANCEL
 
 
+def test_completed_dependencies():
+    """
+    Test that a command can properly report dependency actions when the dependency's status is COMPLETED.
+    """
+    previous_command = DoAnythingCommand(DoAnythingCommandArgs())
+    queue = CommandQueue()
+    queue.submit(previous_command)
+    queue.process_once()
+    assert previous_command.response.status == ResponseStatus.COMPLETED
+    new_command = DoAnythingCommand(
+        DoAnythingCommandArgs(), dependencies=[DependencyEntry(previous_command)]
+    )
+    check_response = new_command.check_dependencies()
+    assert check_response.status == DependencyAction.PROCEED
+
+
 def test_reason_generation():
     """
     Test that the reason for a dependency check is generated correctly.
@@ -132,3 +148,29 @@ def test_reason_generation():
     assert previous_command.response.status == ResponseStatus.PENDING
     assert new_command.response.status == ResponseStatus.PENDING
     assert isinstance(queue_response.command_log[-1].responses[-1].reason, ReasonByDependencyCheck)
+
+
+def test_multiple_dependencies():
+    """
+    Test that a command can handle multiple dependencies correctly.
+
+    Importantly, the severity of the dependency actions should be respected.
+    """
+    previous_command1 = DoAnythingCommand(DoAnythingCommandArgs(defer_times=1))
+    previous_command2 = DoAnythingCommand(DoAnythingCommandArgs(cancel=True))
+    queue = CommandQueue()
+    new_command = DoAnythingCommand(
+        DoAnythingCommandArgs(),
+        dependencies=[
+            previous_command1,
+            previous_command2,
+        ],
+    )
+    queue.submit_many(previous_command1, previous_command2, new_command)
+    queue_response = queue.process_once()
+    assert previous_command1.response.status == ResponseStatus.PENDING
+    assert previous_command2.response.status == ResponseStatus.CANCELED
+    assert new_command.response.status == ResponseStatus.CANCELED
+    final_log_response = queue_response.command_log[-1].responses[-1]
+    assert isinstance(final_log_response.reason, ReasonByDependencyCheck)
+    assert final_log_response.reason.reason.startswith("Canceled due to dependency:")

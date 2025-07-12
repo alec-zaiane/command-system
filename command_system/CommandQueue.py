@@ -103,6 +103,21 @@ class CommandQueue:
         self._queue.append(command)
         return command.response
 
+    def submit_many(self, *commands: Command[Any, Any]) -> list[CommandResponse]:
+        """
+        Submit multiple commands to the queue.
+
+        Args:
+            *commands (Command[ArgsType, ResponseType]): The commands to be submitted.
+
+        Returns:
+            list[ResponseType]: List of response objects associated with the submitted commands.
+        """
+        responses: list[CommandResponse] = []
+        for command in commands:
+            responses.append(self.submit(command))
+        return responses
+
     def process_once(self, max_iterations: int = 1000) -> QueueProcessResponse:
         """
         Process all commands in the queue a single time.
