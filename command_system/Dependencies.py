@@ -6,7 +6,7 @@ from .CommandLifecycle import LifecycleResponseReason
 from .CommandResponse import ResponseStatus
 
 if TYPE_CHECKING:
-    from Command import Command, CommandArgs, CommandResponse
+    from .Command import Command, CommandArgs, CommandResponse
 
 
 class DependencyAction(Enum):
@@ -45,9 +45,7 @@ class DependencyCheckResponse:
     status: DependencyAction
     reasons: list[str] = cast(list[str], field(default_factory=list))
 
-    def attempt_escalation(
-        self, status: DependencyAction, reason: Optional[str] = None
-    ) -> None:
+    def attempt_escalation(self, status: DependencyAction, reason: Optional[str] = None) -> None:
         """
         Update the status of the dependency check response if the new status is more severe than the current one.
 
