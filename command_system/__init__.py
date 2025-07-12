@@ -3,18 +3,36 @@ from .CommandLifecycle import (
     CancelResponse,
     DeferResponse,
     ExecutionResponse,
+    ReasonByCommandMethod,
 )
 from .CommandQueue import CommandQueue, QueueProcessResponse
 from .CommandResponse import CommandResponse, ResponseStatus
+from .Dependencies import (
+    DependencyEntry,
+    DependencyCheckResponse,
+    ReasonByDependencyCheck,
+    DependencyAction,
+)
+
 
 __all__ = [
+    # Basic command components
     "Command",
     "CommandArgs",
     "CommandResponse",
+    # Lifecycle related components
     "ResponseStatus",
     "DeferResponse",
     "CancelResponse",
     "ExecutionResponse",
+    # Lifecycle response reasons
+    "ReasonByCommandMethod",
+    "ReasonByDependencyCheck",
+    # Queueing components
     "CommandQueue",
     "QueueProcessResponse",
+    # Dependency management
+    "DependencyEntry",
+    "DependencyCheckResponse",
+    "DependencyAction",
 ]

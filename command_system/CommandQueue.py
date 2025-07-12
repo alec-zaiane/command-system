@@ -2,13 +2,17 @@ from dataclasses import dataclass
 from typing import Any, cast, Optional
 
 from .Command import Command, CommandArgs, ResponseType
-from .CommandLifecycle import LifecycleResponse, ExecutionResponse
+from .CommandLifecycle import (
+    LifecycleResponse,
+    ExecutionResponse,
+    DeferResponse,
+    CancelResponse,
+)
 from .CommandResponse import CommandResponse, ResponseStatus
 from .Dependencies import (
     DependencyCheckResponse,
     DependencyAction,
-    DeferResponseViaDependency,
-    CancelResponseViaDependency,
+    ReasonByDependencyCheck,
 )
 
 from logging import getLogger
@@ -70,15 +74,13 @@ class QueueProcessResponse:
             QueueProcessResponse: A new QueueProcessResponse object with combined values.
         """
         return QueueProcessResponse(
-            num_commands_processed=self.num_commands_processed
-            + other.num_commands_processed,
+            num_commands_processed=self.num_commands_processed + other.num_commands_processed,
             num_ingested=self.num_ingested + other.num_ingested,
             num_deferrals=self.num_deferrals + other.num_deferrals,
             num_cancellations=self.num_cancellations + other.num_cancellations,
             num_successes=self.num_successes + other.num_successes,
             num_failures=self.num_failures + other.num_failures,
-            reached_max_iterations=self.reached_max_iterations
-            or other.reached_max_iterations,
+            reached_max_iterations=self.reached_max_iterations or other.reached_max_iterations,
             command_log=self.command_log + other.command_log,
         )
 
@@ -86,9 +88,7 @@ class QueueProcessResponse:
 class CommandQueue:
     def __init__(self):
         self._queue: list[Command[Any, Any]] = []
-        self.logger = getLogger(
-            f"{self.__class__.__module__}.{self.__class__.__name__}@{id(self)}"
-        )
+        self.logger = getLogger(f"{self.__class__.__module__}.{self.__class__.__name__}@{id(self)}")
 
     def submit(self, command: Command[Any, ResponseType]) -> ResponseType:
         """
@@ -135,12 +135,26 @@ class CommandQueue:
                 command_log_entry.dependency_response = dependency_response
                 if dependency_response.status == DependencyAction.DEFER:
                     response.num_deferrals += 1
-                    command.call_on_defer_callbacks(DeferResponseViaDependency())
+                    new_defer_response = DeferResponse(
+                        should_proceed=False,
+                        reason=ReasonByDependencyCheck(
+                            f"Deferred due to dependency: {dependency_response.reasons}"
+                        ),
+                    )
+                    command.call_on_defer_callbacks(new_defer_response)
+                    command_log_entry.responses.append(new_defer_response)
                     response.command_log.append(command_log_entry)
                     continue
                 elif dependency_response.status == DependencyAction.CANCEL:
                     response.num_cancellations += 1
-                    command.call_on_cancel_callbacks(CancelResponseViaDependency())
+                    new_cancel_response = CancelResponse(
+                        should_proceed=False,
+                        reason=ReasonByDependencyCheck(
+                            f"Canceled due to dependency: {dependency_response.reasons}"
+                        ),
+                    )
+                    command.call_on_cancel_callbacks(new_cancel_response)
+                    command_log_entry.responses.append(new_cancel_response)
                     command.response.status = ResponseStatus.CANCELED
                     to_remove.append(command)
                     response.command_log.append(command_log_entry)

@@ -32,6 +32,23 @@ class CallbackRecord(Generic[LifecycleResponseType]):
 
 
 @dataclass
+class LifecycleResponseReason:
+    reason: str
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, self.__class__):
+            return False
+        return self.reason == other.reason
+
+
+@dataclass
+class ReasonByCommandMethod(LifecycleResponseReason):
+    """A reason for a lifecycle response that was created by a command function (e.g., `should_defer`, `should_cancel`, etc.)."""
+
+    pass
+
+
+@dataclass
 class LifecycleResponse:
     """
     Base class for lifecycle responses.
@@ -43,7 +60,7 @@ class LifecycleResponse:
     """
 
     should_proceed: bool
-    reason: Optional[str] = None
+    reason: Optional[LifecycleResponseReason] = None
     executed_callbacks: list[CallbackRecord[Self]] = cast(
         list[CallbackRecord[Self]], field(default_factory=list)
     )
@@ -58,8 +75,14 @@ class DeferResponse(LifecycleResponse):
 
     @classmethod
     def defer(cls, reason: Optional[str]) -> "DeferResponse":
-        """Defer the command execution, optionally providing a reason."""
-        return cls(should_proceed=False, reason=reason)
+        """Defer the command execution, optionally providing a reason.
+
+        The reason will be wrapped in a `ReasonByCommandMethod` instance.
+        """
+        return cls(
+            should_proceed=False,
+            reason=ReasonByCommandMethod(reason) if reason else None,
+        )
 
     @classmethod
     def proceed(cls) -> "DeferResponse":
@@ -76,8 +99,14 @@ class CancelResponse(LifecycleResponse):
 
     @classmethod
     def cancel(cls, reason: Optional[str]) -> "CancelResponse":
-        """Cancel the command execution, optionally providing a reason."""
-        return cls(should_proceed=False, reason=reason)
+        """Cancel the command execution, optionally providing a reason.
+
+        The reason will be wrapped in a `ReasonByCommandMethod` instance.
+        """
+        return cls(
+            should_proceed=False,
+            reason=ReasonByCommandMethod(reason) if reason else None,
+        )
 
     @classmethod
     def proceed(cls) -> "CancelResponse":
@@ -99,5 +128,11 @@ class ExecutionResponse(LifecycleResponse):
 
     @classmethod
     def failure(cls, reason: Optional[str]) -> "ExecutionResponse":
-        """Indicate failed command execution, optionally providing a reason."""
-        return cls(should_proceed=False, reason=reason)
+        """Indicate failed command execution, optionally providing a reason.
+
+        The reason will be wrapped in a `ReasonByCommandMethod` instance.
+        """
+        return cls(
+            should_proceed=False,
+            reason=ReasonByCommandMethod(reason) if reason else None,
+        )

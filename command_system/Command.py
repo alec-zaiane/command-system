@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Callable, Generic, Type, TypeVar, final
+from typing import Callable, Generic, Type, TypeVar, final, Optional
 
 from .CommandLifecycle import (
     CallbackRecord,
@@ -34,7 +34,7 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
     ARGS: Type[ArgsType]
     _response_type: Type[ResponseType]
 
-    def __init__(self, args: ArgsType):
+    def __init__(self, args: ArgsType, dependencies: Optional[list[DependencyEntry]] = None):
         self._args = args
         self.response = self._init_response()
 
@@ -45,6 +45,8 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
 
         # dependencies
         self._dependencies: list[DependencyEntry] = []
+        for dependency in dependencies or []:
+            self.add_dependency(dependency)
 
     @property
     def args(self) -> ArgsType:
@@ -61,7 +63,35 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
         Returns:
             ResponseType: An instance of the response type for this command.
         """
+        if not hasattr(self, "_response_type"):
+            raise SyntaxError(
+                "Command subclasses must define a `_response_type` class variable, and/or override `_init_response()` to initialize the response."
+            )
         return self._response_type(status=ResponseStatus.CREATED)
+
+    def add_dependency(self, dependency: DependencyEntry) -> None:
+        """
+        Add a dependency to the command.
+
+        Args:
+            dependency (DependencyEntry): The dependency to be added.
+        """
+        self._dependencies.append(dependency)
+
+    def remove_dependency(self, dependency: DependencyEntry) -> None:
+        """
+        Remove a dependency from the command.
+
+        Raises:
+            ValueError: If the dependency is not found in the command's dependencies.
+
+        Args:
+            dependency (DependencyEntry): The dependency to be removed.
+        """
+        if dependency in self._dependencies:
+            self._dependencies.remove(dependency)
+        else:
+            raise ValueError(f"Dependency {dependency} not found in command dependencies.")
 
     @final
     def check_dependencies(self) -> DependencyCheckResponse:
@@ -137,13 +167,9 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
         """
         try:
             callback(response)
-            response.executed_callbacks.append(
-                CallbackRecord(callback=callback, error=None)
-            )
+            response.executed_callbacks.append(CallbackRecord(callback=callback, error=None))
         except Exception as e:
-            response.executed_callbacks.append(
-                CallbackRecord(callback=callback, error=e)
-            )
+            response.executed_callbacks.append(CallbackRecord(callback=callback, error=e))
 
     @final
     def add_on_defer_callback(self, callback: Callable[[DeferResponse], None]) -> None:
@@ -168,9 +194,7 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
             self._call_single_callback(callback, response)
 
     @final
-    def add_on_cancel_callback(
-        self, callback: Callable[[CancelResponse], None]
-    ) -> None:
+    def add_on_cancel_callback(self, callback: Callable[[CancelResponse], None]) -> None:
         """
         Add a callback to be called when the command is canceled.
 
@@ -192,9 +216,7 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
             self._call_single_callback(callback, response)
 
     @final
-    def add_on_execute_callback(
-        self, callback: Callable[[ExecutionResponse], None]
-    ) -> None:
+    def add_on_execute_callback(self, callback: Callable[[ExecutionResponse], None]) -> None:
         """
         Add a callback to be called when the command is executed.
 
@@ -214,3 +236,9 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
         """
         for callback in self._on_execute_callbacks:
             self._call_single_callback(callback, response)
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}(args={self._args}, "
+            f"response={self.response}, dependencies={self._dependencies})"
+        )

@@ -1,12 +1,12 @@
 from enum import Enum
 from dataclasses import dataclass, field
 
-from typing import TYPE_CHECKING, Literal, cast, Optional
-from .CommandResponse import ResponseStatus, CommandResponse
-from .CommandLifecycle import DeferResponse, CancelResponse
+from typing import TYPE_CHECKING, Literal, cast, Optional, Any
+from .CommandResponse import ResponseStatus
+from .CommandLifecycle import LifecycleResponseReason
 
 if TYPE_CHECKING:
-    from Command import Command, CommandArgs
+    from Command import Command, CommandArgs, CommandResponse
 
 
 class DependencyAction(Enum):
@@ -19,26 +19,13 @@ class DependencyAction(Enum):
     CANCEL = "cancel"
 
 
-class DeferResponseViaDependency(DeferResponse):
+@dataclass
+class ReasonByDependencyCheck(LifecycleResponseReason):
     """
-    A response indicating that a command was deferred due to a dependency check.
-    """
-
-    def __init__(self):
-        super().__init__(
-            should_proceed=False, reason="Deferred due to dependency check."
-        )
-
-
-class CancelResponseViaDependency(CancelResponse):
-    """
-    A response indicating that a command was canceled due to a dependency check.
+    A reason for a lifecycle response that was created by a dependency check.
     """
 
-    def __init__(self):
-        super().__init__(
-            should_proceed=False, reason="Canceled due to dependency check."
-        )
+    pass
 
 
 @dataclass
@@ -140,7 +127,7 @@ class DependencyEntry:
 
     """
 
-    command: "Command[CommandArgs, CommandResponse]"
+    command: "Command[Any, Any]"
     on_pending: Literal["defer", "cancel", "proceed"] = "defer"
     on_canceled: Literal["cancel", "proceed"] = "cancel"
     on_failed: Literal["cancel", "proceed"] = "cancel"
@@ -150,8 +137,9 @@ class DependencyEntry:
         """
         Evaluate the dependency entry based on the current state of the command.
         """
+        command = cast("Command[CommandArgs, CommandResponse]", self.command)
         # no need for case _ here, type checker yells at us if we miss a case
-        match self.command.response.status:
+        match command.response.status:
             case ResponseStatus.PENDING | ResponseStatus.CREATED:
                 return _dependency_action_map[self.on_pending]
             case ResponseStatus.CANCELED:
