@@ -211,6 +211,7 @@ class CommandQueue:
                 ResponseStatus.COMPLETED,
                 ResponseStatus.FAILED,
             ):
+                # double removes it but that's fine, better than missing a removal
                 to_remove.append(command)
             response.command_log.append(command_log_entry)
         # remove all processed commands

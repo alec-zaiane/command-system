@@ -9,6 +9,7 @@ from command_system import (
     ResponseStatus,
 )
 from dataclasses import dataclass
+import pytest
 
 
 @dataclass
@@ -74,3 +75,70 @@ def test_command_chain_add_one():
     assert chain.response.status == ResponseStatus.COMPLETED
     assert response.num_commands_processed == 4  # chain + 3 commands
     assert chain.response.output_data == 3  # 0 + 1 + 1 + 1
+
+
+def test_command_chain_fail():
+    queue = CommandQueue()
+    chain = (
+        CommandChainBuilder[int, int]
+        .start(
+            0,
+            lambda x: AddOneArgs(number=x),
+            AddOneCommand,
+            lambda response: response.result,
+        )
+        .then(
+            lambda x: AddOneArgs(number=x, should_fail=True),
+            AddOneCommand,
+            lambda response: response.result,
+        )
+        .then(
+            lambda x: AddOneArgs(number=x),
+            AddOneCommand,
+            lambda response: response.result,
+        )
+        .build(queue)
+    )
+    queue.submit(chain)
+    response = queue.process_all()
+    assert chain.response.status == ResponseStatus.FAILED
+    assert response.num_commands_processed == 3  # chain + good command + failed command
+    assert chain.response.output_data is None  # no output data due to failure
+
+
+def test_command_chain_cancel():
+    queue = CommandQueue()
+    chain = (
+        CommandChainBuilder[int, int]
+        .start(
+            0,
+            lambda x: AddOneArgs(number=x, should_cancel=True),
+            AddOneCommand,
+            lambda response: response.result,
+        )
+        .then(
+            lambda x: AddOneArgs(number=x),
+            AddOneCommand,
+            lambda response: response.result,
+        )
+        .then(
+            lambda x: AddOneArgs(number=x),
+            AddOneCommand,
+            lambda response: response.result,
+        )
+        .build(queue)
+    )
+    queue.submit(chain)
+    response = queue.process_all()
+    assert chain.response.status == ResponseStatus.FAILED
+    assert response.num_commands_processed == 2  # chain + cancelled command
+    assert chain.response.output_data is None  # no output data due to cancellation
+
+
+def test_cannot_then_without_start():
+    with pytest.raises(ValueError):
+        _ = CommandChainBuilder[int, int](0, []).then(
+            lambda x: AddOneArgs(number=x),
+            AddOneCommand,
+            lambda response: response.result,
+        )
