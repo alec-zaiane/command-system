@@ -1,19 +1,26 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Callable, Generic, Type, TypeVar, final
+from typing import Any, Callable, Generic, Optional, Type, TypeVar, final
 
 from .CommandLifecycle import (
+    CallbackRecord,
     CancelResponse,
     DeferResponse,
     ExecutionResponse,
-    CallbackRecord,
     LifecycleResponse,
 )
 from .CommandResponse import CommandResponse, ResponseStatus
+from .Dependencies import DependencyCheckResponse, DependencyEntry
 
 
 @dataclass
 class CommandArgs:
+    """
+    Arguments for a command / Data supplied to a command.
+
+    The base CommandArgs class is empty, but subclasses can define specific arguments.
+    """
+
     pass
 
 
@@ -27,7 +34,11 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
     ARGS: Type[ArgsType]
     _response_type: Type[ResponseType]
 
-    def __init__(self, args: ArgsType):
+    def __init__(
+        self,
+        args: ArgsType,
+        dependencies: "Optional[list[DependencyEntry|Command[Any,Any]]]" = None,
+    ):
         self._args = args
         self.response = self._init_response()
 
@@ -35,6 +46,20 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
         self._on_defer_callbacks: list[Callable[[DeferResponse], None]] = []
         self._on_cancel_callbacks: list[Callable[[CancelResponse], None]] = []
         self._on_execute_callbacks: list[Callable[[ExecutionResponse], None]] = []
+
+        # dependencies
+        self._dependencies: list[DependencyEntry] = []
+        for dependency in dependencies or []:
+            self.add_dependency(dependency)
+
+        self.__post_init__()
+
+    def __post_init__(self) -> None:
+        """
+        Post initialization method for the command.
+        Override this in subclasses if additional initialization logic is needed.
+        """
+        pass
 
     @property
     def args(self) -> ArgsType:
@@ -51,7 +76,59 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
         Returns:
             ResponseType: An instance of the response type for this command.
         """
+        if not hasattr(self, "_response_type"):
+            raise SyntaxError(
+                "Command subclasses must define a `_response_type` class variable, and/or override `_init_response()` to initialize the response."
+            )
         return self._response_type(status=ResponseStatus.CREATED)
+
+    def add_dependency(self, dependency: "DependencyEntry|Command[Any,Any]") -> None:
+        """
+        Add a dependency to the command.
+
+        Either provide a Command instance or optionally a DependencyEntry wrapping a Command for more control.
+
+        Args:
+            dependency (DependencyEntry|Command): The dependency to be added.
+        """
+        # TODO allow for passing just a Command and find the DependencyEntry automatically
+        if isinstance(dependency, Command):
+            dependency = DependencyEntry(dependency)
+        self._dependencies.append(dependency)
+
+    def remove_dependency(self, dependency: DependencyEntry) -> None:
+        """
+        Remove a dependency from the command. You muist provide the exact DependencyEntry instance, not just a Command.
+
+        Raises:
+            ValueError: If the dependency is not found in the command's dependencies.
+
+        Args:
+            dependency (DependencyEntry): The dependency to be removed.
+        """
+        if dependency in self._dependencies:
+            self._dependencies.remove(dependency)
+        else:
+            raise ValueError(f"Dependency {dependency} not found in command dependencies.")
+
+    @final
+    def check_dependencies(self) -> DependencyCheckResponse:
+        """
+        Check if the command has any dependencies that need to be resolved before execution.
+
+        CANCEL takes precedence over DEFER, and DEFER takes precedence over PROCEED.
+
+        Returns:
+            DependencyCheckResponse: An enum indicating what action should be taken (DEFER, CANCEL, PROCEED). This check will take precedence over `should_defer()` and `should_cancel()`.
+        """
+        output = DependencyCheckResponse.proceed()
+        for dependency in self._dependencies:
+            dependency_response = dependency.evaluate()
+            output.attempt_escalation(
+                dependency_response,
+                f"Dependency {dependency} returned {dependency_response} during evaluation.",
+            )
+        return output
 
     def should_defer(self) -> DeferResponse:
         """
@@ -91,7 +168,9 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
     # Callbacks
     @final
     def _call_single_callback(
-        self, callback: Callable[[_LifecycleResponseType], None], response: _LifecycleResponseType
+        self,
+        callback: Callable[[_LifecycleResponseType], None],
+        response: _LifecycleResponseType,
     ) -> None:
         """
         [Private, do not override]
@@ -175,3 +254,9 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
         """
         for callback in self._on_execute_callbacks:
             self._call_single_callback(callback, response)
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}(args={self._args}, "
+            f"response={self.response}, dependencies={self._dependencies})"
+        )

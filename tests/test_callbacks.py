@@ -1,12 +1,13 @@
+from test_defer_cancel import ExternalSystem, WaitToHelloCommand
+
 from command_system import (
     CancelResponse,
     CommandQueue,
     DeferResponse,
     ExecutionResponse,
+    ReasonByCommandMethod,
     ResponseStatus,
 )
-
-from test_defer_cancel import WaitToHelloCommand, ExternalSystem
 
 
 def test_defer_callback():
@@ -34,7 +35,7 @@ def test_cancel_callback():
     def sample_cancel_callback(response: CancelResponse):
         nonlocal cancel_callback_called
         cancel_callback_called = True
-        assert response.reason == "External system requested cancellation."
+        assert response.reason == ReasonByCommandMethod("External system requested cancellation.")
 
     queue = CommandQueue()
     command = WaitToHelloCommand(WaitToHelloCommand.ARGS(external_system))
@@ -43,9 +44,8 @@ def test_cancel_callback():
     queue_response = queue.process_all()
     assert cancel_callback_called is True
     assert response.status == ResponseStatus.CANCELED
-    assert (
-        queue_response.command_log[-1].responses[-1].reason
-        == "External system requested cancellation."
+    assert queue_response.command_log[-1].responses[-1].reason == ReasonByCommandMethod(
+        "External system requested cancellation."
     )
 
 

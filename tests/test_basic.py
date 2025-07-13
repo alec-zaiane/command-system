@@ -5,8 +5,9 @@ from command_system import (
     Command,
     CommandArgs,
     CommandQueue,
-    ExecutionResponse,
     CommandResponse,
+    ExecutionResponse,
+    ReasonByCommandMethod,
     ResponseStatus,
 )
 
@@ -59,7 +60,9 @@ def test_say_hello_failure():
     assert response.status == ResponseStatus.CREATED
     queue_response = queue.process_once()
     assert response.status == ResponseStatus.FAILED
-    assert queue_response.command_log[-1].responses[-1].reason == "Cannot say hello to no one."
+    assert queue_response.command_log[-1].responses[-1].reason == ReasonByCommandMethod(
+        "Cannot say hello to no one."
+    )
 
 
 def test_re_add_completed_command():

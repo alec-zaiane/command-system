@@ -6,9 +6,10 @@ from command_system import (
     Command,
     CommandArgs,
     CommandQueue,
+    CommandResponse,
     DeferResponse,
     ExecutionResponse,
-    CommandResponse,
+    ReasonByCommandMethod,
     ResponseStatus,
 )
 
@@ -55,7 +56,9 @@ def test_wait_to_hello_defer():
     # Since name is None, the command should defer and the reason should be set inside the queue response
     queue_response = queue.process_once()
     assert response.status == ResponseStatus.PENDING
-    assert queue_response.command_log[-1].responses[-1].reason == "Name is required to say hello."
+    assert queue_response.command_log[-1].responses[-1].reason == ReasonByCommandMethod(
+        "Name is required to say hello."
+    )
     # Name is still none; command should still be deferring
     queue.process_once()
     assert response.status == ResponseStatus.PENDING
@@ -75,7 +78,6 @@ def test_wait_to_hello_cancel():
     queue_response = queue.process_all()
     # Make sure it was cancelled, and the reason is set
     assert response.status == ResponseStatus.CANCELED
-    assert (
-        queue_response.command_log[-1].responses[-1].reason
-        == "External system requested cancellation."
+    assert queue_response.command_log[-1].responses[-1].reason == ReasonByCommandMethod(
+        "External system requested cancellation."
     )

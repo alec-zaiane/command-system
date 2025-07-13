@@ -1,9 +1,20 @@
 from dataclasses import dataclass
-from typing import Any, cast
+from logging import getLogger
+from typing import Any, Optional, cast
 
 from .Command import Command, CommandArgs, ResponseType
-from .CommandLifecycle import LifecycleResponse, ExecutionResponse
+from .CommandLifecycle import (
+    CancelResponse,
+    DeferResponse,
+    ExecutionResponse,
+    LifecycleResponse,
+)
 from .CommandResponse import CommandResponse, ResponseStatus
+from .Dependencies import (
+    DependencyAction,
+    DependencyCheckResponse,
+    ReasonByDependencyCheck,
+)
 
 
 @dataclass
@@ -16,10 +27,12 @@ class CommandLogEntry:
     Attributes:
         command (Command[Any, Any]): The command that was processed.
         responses (list[LifecycleResponse]): List of responses from the lifecycle actions of the command.
+        dependency_response (DependencyCheckResponse): The response from the dependency check of the command.
     """
 
     command: Command[Any, Any]
     responses: list[LifecycleResponse]
+    dependency_response: Optional[DependencyCheckResponse]
 
 
 @dataclass
@@ -74,6 +87,7 @@ class QueueProcessResponse:
 class CommandQueue:
     def __init__(self):
         self._queue: list[Command[Any, Any]] = []
+        self.logger = getLogger(f"{self.__class__.__module__}.{self.__class__.__name__}@{id(self)}")
 
     def submit(self, command: Command[Any, ResponseType]) -> ResponseType:
         """
@@ -87,6 +101,21 @@ class CommandQueue:
         """
         self._queue.append(command)
         return command.response
+
+    def submit_many(self, *commands: Command[Any, Any]) -> list[CommandResponse]:
+        """
+        Submit multiple commands to the queue.
+
+        Args:
+            *commands (Command[ArgsType, ResponseType]): The commands to be submitted.
+
+        Returns:
+            list[ResponseType]: List of response objects associated with the submitted commands.
+        """
+        responses: list[CommandResponse] = []
+        for command in commands:
+            responses.append(self.submit(command))
+        return responses
 
     def process_once(self, max_iterations: int = 1000) -> QueueProcessResponse:
         """
@@ -103,7 +132,9 @@ class CommandQueue:
         response = QueueProcessResponse(command_log=[])
         to_remove: list[Command[Any, Any]] = []
         for command in self._queue:
-            command_log_entry = CommandLogEntry(command=command, responses=[])
+            command_log_entry = CommandLogEntry(
+                command=command, responses=[], dependency_response=None
+            )
             if response.num_commands_processed >= max_iterations:
                 response.reached_max_iterations = True
                 break
@@ -113,6 +144,36 @@ class CommandQueue:
                 response.num_ingested += 1
                 command.response.status = ResponseStatus.PENDING
             if command.response.status == ResponseStatus.PENDING:
+                # check dependencies first
+                dependency_response = command.check_dependencies()
+                command_log_entry.dependency_response = dependency_response
+                if dependency_response.status == DependencyAction.DEFER:
+                    response.num_deferrals += 1
+                    new_defer_response = DeferResponse(
+                        should_proceed=False,
+                        reason=ReasonByDependencyCheck(
+                            f"Deferred due to dependency: {dependency_response.reasons}"
+                        ),
+                    )
+                    command.call_on_defer_callbacks(new_defer_response)
+                    command_log_entry.responses.append(new_defer_response)
+                    response.command_log.append(command_log_entry)
+                    continue
+                elif dependency_response.status == DependencyAction.CANCEL:
+                    response.num_cancellations += 1
+                    new_cancel_response = CancelResponse(
+                        should_proceed=False,
+                        reason=ReasonByDependencyCheck(
+                            f"Canceled due to dependency: {dependency_response.reasons}"
+                        ),
+                    )
+                    command.call_on_cancel_callbacks(new_cancel_response)
+                    command_log_entry.responses.append(new_cancel_response)
+                    command.response.status = ResponseStatus.CANCELED
+                    to_remove.append(command)
+                    response.command_log.append(command_log_entry)
+                    continue
+
                 # check if we should defer
                 defer_response = command.should_defer()
                 command_log_entry.responses.append(defer_response)
@@ -150,7 +211,7 @@ class CommandQueue:
                 ResponseStatus.COMPLETED,
                 ResponseStatus.FAILED,
             ):
-                # maybe it was already processed, and accidentally re-added to the queue
+                # double removes it but that's fine, better than missing a removal
                 to_remove.append(command)
             response.command_log.append(command_log_entry)
         # remove all processed commands
@@ -187,3 +248,6 @@ class CommandQueue:
             int: The number of commands in the queue.
         """
         return len(self._queue)
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"{self.__class__.__name__}(queue_size={len(self._queue)})"
