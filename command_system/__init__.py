@@ -13,6 +13,7 @@ from .Dependencies import (
     DependencyEntry,
     ReasonByDependencyCheck,
 )
+from .CommandChain import CommandChain, CommandChainArgs, CommandChainResponse, CommandChainBuilder
 
 __all__ = [
     # Basic command components
@@ -34,4 +35,9 @@ __all__ = [
     "DependencyEntry",
     "DependencyCheckResponse",
     "DependencyAction",
+    # Command chain components
+    "CommandChain",
+    "CommandChainArgs",
+    "CommandChainResponse",
+    "CommandChainBuilder",
 ]

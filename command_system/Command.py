@@ -52,6 +52,15 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
         for dependency in dependencies or []:
             self.add_dependency(dependency)
 
+        self.__post_init__()
+
+    def __post_init__(self) -> None:
+        """
+        Post initialization method for the command.
+        Override this in subclasses if additional initialization logic is needed.
+        """
+        pass
+
     @property
     def args(self) -> ArgsType:
         """Get the command arguments."""
