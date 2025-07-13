@@ -77,7 +77,7 @@ class DependencyCheckResponse:
         if reason is not None:
             self.reasons.append(reason)
 
-    def __repr__(self) -> str:
+    def __repr__(self) -> str:  # pragma: no cover
         return f"DependencyCheckResponse(status={self.status}, reasons={','.join(self.reasons)})"
 
     @classmethod

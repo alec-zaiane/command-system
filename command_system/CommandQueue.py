@@ -211,7 +211,7 @@ class CommandQueue:
                 ResponseStatus.COMPLETED,
                 ResponseStatus.FAILED,
             ):
-                # maybe it was already processed, and accidentally re-added to the queue
+                # double removes it but that's fine, better than missing a removal
                 to_remove.append(command)
             response.command_log.append(command_log_entry)
         # remove all processed commands
@@ -248,3 +248,6 @@ class CommandQueue:
             int: The number of commands in the queue.
         """
         return len(self._queue)
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"{self.__class__.__name__}(queue_size={len(self._queue)})"

@@ -158,15 +158,17 @@ def test_multiple_dependencies():
     """
     previous_command1 = DoAnythingCommand(DoAnythingCommandArgs(defer_times=1))
     previous_command2 = DoAnythingCommand(DoAnythingCommandArgs(cancel=True))
+    previous_command3 = DoAnythingCommand(DoAnythingCommandArgs(defer_times=1))
     queue = CommandQueue()
     new_command = DoAnythingCommand(
         DoAnythingCommandArgs(),
         dependencies=[
             previous_command1,
             previous_command2,
+            previous_command3,
         ],
     )
-    queue.submit_many(previous_command1, previous_command2, new_command)
+    queue.submit_many(previous_command1, previous_command2, previous_command3, new_command)
     queue_response = queue.process_once()
     assert previous_command1.response.status == ResponseStatus.PENDING
     assert previous_command2.response.status == ResponseStatus.CANCELED
