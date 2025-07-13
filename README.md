@@ -66,7 +66,29 @@ flowchart TD
     F -->|"ExecutionResponse.success()"| G["ResponseStatus.COMPLETED"]
     F -->|"ExecutionResponse.failure()"| H["ResponseStatus.FAILED"]
 ```
+## Chaining Commands
+You can chain commands together using the `CommandChainBuilder`. By doing this, you can create a sequence of commands that will be executed in order, passing the output of one command as the input to the next (with customizable transformations).
 
+```python
+from 
+from my_command import MyCommand, MyCommandArgs
+from my_other_command import MyOtherCommand, MyOtherCommandArgs
+
+queue = CommandQueue()
+chain = CommandChainBuilder[str, str].start(
+    "my initial input",
+    args_factory=lambda x: MyCommandArgs(input_data=x),
+    command_class=MyCommand,
+    result_extractor=lambda response: response.output_data,
+).then(
+    args_factory=lambda x: MyOtherCommandArgs(input_data=x, other_data="another value"),
+    command_class=MyOtherCommand,
+    result_extractor=lambda response: response.output_data,
+).build(queue)
+
+queue.submit(chain)
+queue.process_all()
+```
 
 ## Dependency Management
 Commands can now define dependencies on other commands. Dependencies are evaluated before each lifecycle check begins, and they can preemptively defer or cancel the command based on their statuses.
