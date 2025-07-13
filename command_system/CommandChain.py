@@ -158,7 +158,7 @@ class CommandChain(
         command: Command[Any, Any],
         next_index: int,
     ) -> None:
-        """Callback for when a command in the chian is executed.
+        """Callback for when a command in the chain is executed.
         Handles the response from the command, extracting the output data and adding the next command to the queue.
         """
         if not response.should_proceed:
