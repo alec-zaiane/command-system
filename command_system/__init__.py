@@ -5,7 +5,7 @@ from .CommandLifecycle import (
     ExecutionResponse,
     ReasonByCommandMethod,
 )
-from .CommandQueue import CommandQueue, QueueProcessResponse
+from .CommandQueue import CommandQueue, QueueProcessResponse, CommandTimingData
 from .CommandResponse import CommandResponse, ResponseStatus
 from .Dependencies import (
     DependencyAction,
@@ -31,6 +31,7 @@ __all__ = [
     # Queueing components
     "CommandQueue",
     "QueueProcessResponse",
+    "CommandTimingData",
     # Dependency management
     "DependencyEntry",
     "DependencyCheckResponse",
