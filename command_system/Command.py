@@ -211,6 +211,15 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
         for callback in self._on_defer_callbacks:
             self._call_single_callback(callback, response)
 
+    def on_defer_callbacks_count(self) -> int:
+        """
+        Get the number of registered on-defer callbacks.
+
+        Returns:
+            int: The number of on-defer callbacks registered for this command.
+        """
+        return len(self._on_defer_callbacks)
+
     @final
     def add_on_cancel_callback(self, callback: Callable[[CancelResponse], None]) -> None:
         """
@@ -233,6 +242,15 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
         for callback in self._on_cancel_callbacks:
             self._call_single_callback(callback, response)
 
+    def on_cancel_callbacks_count(self) -> int:
+        """
+        Get the number of registered on-cancel callbacks.
+
+        Returns:
+            int: The number of on-cancel callbacks registered for this command.
+        """
+        return len(self._on_cancel_callbacks)
+
     @final
     def add_on_execute_callback(self, callback: Callable[[ExecutionResponse], None]) -> None:
         """
@@ -254,6 +272,15 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
         """
         for callback in self._on_execute_callbacks:
             self._call_single_callback(callback, response)
+
+    def on_execute_callbacks_count(self) -> int:
+        """
+        Get the number of registered on-execute callbacks.
+
+        Returns:
+            int: The number of on-execute callbacks registered for this command.
+        """
+        return len(self._on_execute_callbacks)
 
     def __repr__(self) -> str:
         return (
