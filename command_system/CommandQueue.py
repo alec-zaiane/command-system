@@ -392,14 +392,16 @@ class CommandQueue:
 
         def calculate_subtimings(
             input_timings: deque[_InternalQueueTimingEntry],
-        ) -> defaultdict[
-            Type[Command[Any, Any]],
-            tuple[
-                CommandTimingData.CommandTimingEntry, float, CommandTimingData.CommandTimingEntry
+        ) -> tuple[
+            defaultdict[
+                Type[Command[Any, Any]],
+                tuple[CommandTimingData.CommandTimingEntry, CommandTimingData.CommandTimingEntry],
             ],
+            defaultdict[Type[Command[Any, Any]], float],
         ]:
-            """invert a deque of _InternalQueueTimingEntry objects into a dictionary mapping
-            command types to (command timing, failed percent, callbacks timing) tuples.
+            """invert a deque of _InternalQueueTimingEntry objects into two dictionaries:
+            one maps command types -> (command timing data, callbacks timing data)
+            the other maps command types -> failure percentage (opposite of `should_proceed` percentage)
             """
             intermediate_timings = defaultdict[
                 Type[Command[Any, Any]], list[_InternalQueueTimingEntry]
@@ -407,20 +409,16 @@ class CommandQueue:
             for entry in input_timings:
                 intermediate_timings[entry.command_type].append(entry)
             # now calculate the average and standard deviation for each command type
-            output: defaultdict[
+            output = defaultdict[
                 Type[Command[Any, Any]],
-                tuple[
-                    CommandTimingData.CommandTimingEntry,
-                    float,
-                    CommandTimingData.CommandTimingEntry,
-                ],
-            ] = defaultdict(
+                tuple[CommandTimingData.CommandTimingEntry, CommandTimingData.CommandTimingEntry],
+            ](
                 lambda: (
                     CommandTimingData.CommandTimingEntry(count=0),
-                    float("nan"),  # NaN for percentage
                     CommandTimingData.CommandTimingEntry(count=0),
                 )
             )
+            output_failure_percentage = defaultdict[Type[Command[Any, Any]], float](float)
             for command_type, timings in intermediate_timings.items():
                 if len(timings) == 0:
                     continue
@@ -436,7 +434,6 @@ class CommandQueue:
                             else 0.0
                         ),
                     ),
-                    (1 - sum(entry.response_should_proceed for entry in timings) / len(timings)),
                     CommandTimingData.CommandTimingEntry(
                         count=sum(entry.callbacks_count for entry in timings),
                         avg_elapsed_ms=statistics.mean(
@@ -449,11 +446,14 @@ class CommandQueue:
                         ),
                     ),
                 )
-            return output
+                output_failure_percentage[command_type] = 1 - sum(
+                    entry.response_should_proceed for entry in timings
+                ) / len(timings)
+            return output, output_failure_percentage
 
-        should_defer_subtimings = calculate_subtimings(self._timing_should_defer)
-        should_cancel_subtimings = calculate_subtimings(self._timing_should_cancel)
-        execute_subtimings = calculate_subtimings(self._timing_execute)
+        should_defer_subtimings, defer_percents = calculate_subtimings(self._timing_should_defer)
+        should_cancel_subtimings, cancel_percents = calculate_subtimings(self._timing_should_cancel)
+        execute_subtimings, failure_percents = calculate_subtimings(self._timing_execute)
 
         # now build the output
         encountered_command_types: set[Type[Command[Any, Any]]] = set(
@@ -462,18 +462,17 @@ class CommandQueue:
             | execute_subtimings.keys()
         )
         COMMAND_TIMINGS = 0
-        FAILURE_PERCENTAGE = 1
-        CALLBACKS_TIMINGS = 2
+        CALLBACKS_TIMINGS = 1
         for command_type in encountered_command_types:
             output[command_type] = CommandTimingData(
                 should_defer_timing=should_defer_subtimings[command_type][COMMAND_TIMINGS],
-                should_defer_percentage=should_defer_subtimings[command_type][FAILURE_PERCENTAGE],
+                should_defer_percentage=defer_percents[command_type],
                 should_defer_callbacks=should_defer_subtimings[command_type][CALLBACKS_TIMINGS],
                 should_cancel_timing=should_cancel_subtimings[command_type][COMMAND_TIMINGS],
-                should_cancel_percentage=should_cancel_subtimings[command_type][FAILURE_PERCENTAGE],
+                should_cancel_percentage=cancel_percents[command_type],
                 should_cancel_callbacks=should_cancel_subtimings[command_type][CALLBACKS_TIMINGS],
                 execute_timing=execute_subtimings[command_type][COMMAND_TIMINGS],
-                execute_failure_percentage=execute_subtimings[command_type][FAILURE_PERCENTAGE],
+                execute_failure_percentage=failure_percents[command_type],
                 execute_callbacks=execute_subtimings[command_type][CALLBACKS_TIMINGS],
             )
         return output
