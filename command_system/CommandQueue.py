@@ -1,7 +1,9 @@
 from dataclasses import dataclass
 from logging import getLogger
-from typing import Any, Optional, cast
-
+from typing import Any, Optional, Type
+from collections import deque, defaultdict
+import statistics
+from time import perf_counter
 from .Command import Command, CommandArgs, ResponseType
 from .CommandLifecycle import (
     CancelResponse,
@@ -84,10 +86,66 @@ class QueueProcessResponse:
         )
 
 
+@dataclass
+class _InternalQueueTimingEntry:
+    """
+    Internal timing entry for commands.
+    fields should be self-explanatory.
+    """
+
+    command_type: Type[Command[Any, Any]]
+    method_elapsed_ms: float
+    response_should_proceed: bool  # the method's return.should_proceed value
+    # callbacks are initialized to 0 for ease of building this object
+    callbacks_count: int = 0
+    callbacks_elapsed_ms: float = 0
+
+
+@dataclass
+class CommandTimingData:
+    """Timing data for a set of commands"""
+
+    @dataclass
+    class CommandTimingEntry:
+        count: int
+        avg_elapsed_ms: float = 0
+        std_dev_elapsed_ms: float = 0
+
+    should_defer_timing: CommandTimingEntry
+    should_defer_percentage: float
+    """Percentage of the time should_defer() deferred, or NaN"""
+    should_defer_callbacks: CommandTimingEntry
+    should_cancel_timing: CommandTimingEntry
+    should_cancel_percentage: float
+    """Percentage of the time should_cancel() canceled, or NaN"""
+    should_cancel_callbacks: CommandTimingEntry
+    execute_timing: CommandTimingEntry
+    execute_failure_percentage: float
+    """Percentage of the time execute() returned a failure, or NaN"""
+    execute_callbacks: CommandTimingEntry
+
+
 class CommandQueue:
-    def __init__(self):
+    def __init__(self, timing_queue_length: int = 0):
+        """
+        Construct a new CommandQueue.
+
+        Args:
+            timing_queue_length (int, optional): Length of the timing queue for performance measurement, set to 0 to disable timing. Defaults to 0.
+        """
+        self._timing_queue_length = timing_queue_length
         self._queue: list[Command[Any, Any]] = []
         self.logger = getLogger(f"{self.__class__.__module__}.{self.__class__.__name__}@{id(self)}")
+
+        self._timing_should_defer: deque[_InternalQueueTimingEntry] = deque(
+            maxlen=timing_queue_length,
+        )
+        self._timing_should_cancel: deque[_InternalQueueTimingEntry] = deque(
+            maxlen=timing_queue_length,
+        )
+        self._timing_execute: deque[_InternalQueueTimingEntry] = deque(
+            maxlen=timing_queue_length,
+        )
 
     def submit(self, command: Command[Any, ResponseType]) -> ResponseType:
         """
@@ -117,6 +175,150 @@ class CommandQueue:
             responses.append(self.submit(command))
         return responses
 
+    def _process_single_command(
+        self,
+        command: Command[CommandArgs, CommandResponse],
+        queue_process_response: QueueProcessResponse,
+    ) -> tuple[CommandLogEntry, bool]:
+        """Process a single command and return its log entry
+        Returns:
+            CommandLogEntry: The log entry for the command, containing the command and its responses.
+            bool: True if the command should be removed from the queue, False otherwise.
+        """
+        output = CommandLogEntry(
+            command=command,
+            responses=[],
+            dependency_response=None,
+        )
+        # bring it into PENDING if it hasn't started being processed yet
+        if command.response.status == ResponseStatus.CREATED:
+            queue_process_response.num_ingested += 1
+            command.response.status = ResponseStatus.PENDING
+        # now process the command based on its current status
+        match command.response.status:
+            case ResponseStatus.PENDING:
+                queue_process_response.num_commands_processed += 1
+                # 1. check dependencies
+                dependency_response = command.check_dependencies()
+                output.dependency_response = dependency_response
+                if dependency_response.status == DependencyAction.DEFER:
+                    queue_process_response.num_deferrals += 1
+                    new_defer_response = DeferResponse(
+                        should_proceed=False,
+                        reason=ReasonByDependencyCheck(
+                            f"Deferred due to dependency: {dependency_response.reasons}"
+                        ),
+                    )
+                    start = perf_counter()
+                    command.call_on_defer_callbacks(new_defer_response)
+                    elapsed = perf_counter() - start
+                    self._timing_should_defer.append(
+                        _InternalQueueTimingEntry(
+                            command_type=command.__class__,
+                            method_elapsed_ms=0,  # `should_defer()` didn't run
+                            response_should_proceed=False,
+                            callbacks_count=command.on_defer_callbacks_count(),
+                            callbacks_elapsed_ms=elapsed * 1000,  # convert to ms
+                        )
+                    )
+                    output.responses.append(new_defer_response)
+                    return output, False
+                elif dependency_response.status == DependencyAction.CANCEL:
+                    queue_process_response.num_cancellations += 1
+                    new_cancel_response = CancelResponse(
+                        should_proceed=False,
+                        reason=ReasonByDependencyCheck(
+                            f"Canceled due to dependency: {dependency_response.reasons}"
+                        ),
+                    )
+                    start = perf_counter()
+                    command.call_on_cancel_callbacks(new_cancel_response)
+                    elapsed = perf_counter() - start
+                    self._timing_should_cancel.append(
+                        _InternalQueueTimingEntry(
+                            command_type=command.__class__,
+                            method_elapsed_ms=0,  # `should_cancel()` didn't run
+                            response_should_proceed=False,
+                            callbacks_count=command.on_cancel_callbacks_count(),
+                            callbacks_elapsed_ms=elapsed * 1000,  # convert to ms
+                        )
+                    )
+                    output.responses.append(new_cancel_response)
+                    command.response.status = ResponseStatus.CANCELED
+                    return output, True
+                # 2. check if we should defer
+                start = perf_counter()
+                defer_response = command.should_defer()
+                elapsed = perf_counter() - start
+                defer_timing_entry = _InternalQueueTimingEntry(
+                    command_type=command.__class__,
+                    method_elapsed_ms=elapsed * 1000,
+                    response_should_proceed=defer_response.should_proceed,
+                )
+                if not defer_response.should_proceed:
+                    queue_process_response.num_deferrals += 1
+                    start = perf_counter()
+                    command.call_on_defer_callbacks(defer_response)
+                    elapsed = perf_counter() - start
+                    defer_timing_entry.callbacks_count = command.on_defer_callbacks_count()
+                    defer_timing_entry.callbacks_elapsed_ms = elapsed * 1000
+                    self._timing_should_defer.append(defer_timing_entry)
+                    output.responses.append(defer_response)
+                    return output, False
+                self._timing_should_defer.append(defer_timing_entry)
+                # 3. check if we should cancel
+                start = perf_counter()
+                cancel_response = command.should_cancel()
+                elapsed = perf_counter() - start
+                cancel_timing_entry = _InternalQueueTimingEntry(
+                    command_type=command.__class__,
+                    method_elapsed_ms=elapsed * 1000,
+                    response_should_proceed=cancel_response.should_proceed,
+                )
+                if not cancel_response.should_proceed:
+                    queue_process_response.num_cancellations += 1
+                    start = perf_counter()
+                    command.call_on_cancel_callbacks(cancel_response)
+                    elapsed = perf_counter() - start
+                    cancel_timing_entry.callbacks_count = command.on_cancel_callbacks_count()
+                    cancel_timing_entry.callbacks_elapsed_ms = elapsed * 1000
+                    self._timing_should_cancel.append(cancel_timing_entry)
+                    output.responses.append(cancel_response)
+                    command.response.status = ResponseStatus.CANCELED
+                    return output, True
+                self._timing_should_cancel.append(cancel_timing_entry)
+                # 4. execute the command
+                start = perf_counter()
+                try:
+                    execution_response = command.execute()
+                except Exception as e:
+                    execution_response = ExecutionResponse.failure(str(e))
+                elapsed = perf_counter() - start
+                start = perf_counter()
+                command.call_on_execute_callbacks(execution_response)
+                elapsed_callbacks = perf_counter() - start
+                self._timing_execute.append(
+                    _InternalQueueTimingEntry(
+                        command_type=command.__class__,
+                        method_elapsed_ms=elapsed * 1000,
+                        response_should_proceed=execution_response.should_proceed,
+                        callbacks_count=command.on_execute_callbacks_count(),
+                        callbacks_elapsed_ms=elapsed_callbacks * 1000,
+                    )
+                )
+                output.responses.append(execution_response)
+                if execution_response.should_proceed:
+                    command.response.status = ResponseStatus.COMPLETED
+                    queue_process_response.num_successes += 1
+                else:
+                    command.response.status = ResponseStatus.FAILED
+                    queue_process_response.num_failures += 1
+                return output, True
+
+            case ResponseStatus.CANCELED | ResponseStatus.COMPLETED | ResponseStatus.FAILED:
+                queue_process_response.num_commands_processed += 1
+                return output, True
+
     def process_once(self, max_iterations: int = 1000) -> QueueProcessResponse:
         """
         Process all commands in the queue a single time.
@@ -132,88 +334,13 @@ class CommandQueue:
         response = QueueProcessResponse(command_log=[])
         to_remove: list[Command[Any, Any]] = []
         for command in self._queue:
-            command_log_entry = CommandLogEntry(
-                command=command, responses=[], dependency_response=None
-            )
             if response.num_commands_processed >= max_iterations:
                 response.reached_max_iterations = True
                 break
-            command = cast(Command[CommandArgs, CommandResponse], command)
-            response.num_commands_processed += 1
-            if command.response.status == ResponseStatus.CREATED:
-                response.num_ingested += 1
-                command.response.status = ResponseStatus.PENDING
-            if command.response.status == ResponseStatus.PENDING:
-                # check dependencies first
-                dependency_response = command.check_dependencies()
-                command_log_entry.dependency_response = dependency_response
-                if dependency_response.status == DependencyAction.DEFER:
-                    response.num_deferrals += 1
-                    new_defer_response = DeferResponse(
-                        should_proceed=False,
-                        reason=ReasonByDependencyCheck(
-                            f"Deferred due to dependency: {dependency_response.reasons}"
-                        ),
-                    )
-                    command.call_on_defer_callbacks(new_defer_response)
-                    command_log_entry.responses.append(new_defer_response)
-                    response.command_log.append(command_log_entry)
-                    continue
-                elif dependency_response.status == DependencyAction.CANCEL:
-                    response.num_cancellations += 1
-                    new_cancel_response = CancelResponse(
-                        should_proceed=False,
-                        reason=ReasonByDependencyCheck(
-                            f"Canceled due to dependency: {dependency_response.reasons}"
-                        ),
-                    )
-                    command.call_on_cancel_callbacks(new_cancel_response)
-                    command_log_entry.responses.append(new_cancel_response)
-                    command.response.status = ResponseStatus.CANCELED
-                    to_remove.append(command)
-                    response.command_log.append(command_log_entry)
-                    continue
-
-                # check if we should defer
-                defer_response = command.should_defer()
-                command_log_entry.responses.append(defer_response)
-                if not defer_response.should_proceed:
-                    response.num_deferrals += 1
-                    command.call_on_defer_callbacks(defer_response)
-                    response.command_log.append(command_log_entry)
-                    continue
-                # now check if we should cancel
-                cancel_response = command.should_cancel()
-                command_log_entry.responses.append(cancel_response)
-                if not cancel_response.should_proceed:
-                    response.num_cancellations += 1
-                    command.call_on_cancel_callbacks(cancel_response)
-                    command.response.status = ResponseStatus.CANCELED
-                    to_remove.append(command)
-                    response.command_log.append(command_log_entry)
-                    continue
-                # finally, execute the command
-                try:
-                    execution_response = command.execute()
-                except Exception as e:
-                    execution_response = ExecutionResponse.failure(str(e))
-                command_log_entry.responses.append(execution_response)
-                command.call_on_execute_callbacks(execution_response)
-                if execution_response.should_proceed:
-                    command.response.status = ResponseStatus.COMPLETED
-                    response.num_successes += 1
-                else:
-                    command.response.status = ResponseStatus.FAILED
-                    response.num_failures += 1
-                to_remove.append(command)
-            if command.response.status in (
-                ResponseStatus.CANCELED,
-                ResponseStatus.COMPLETED,
-                ResponseStatus.FAILED,
-            ):
-                # double removes it but that's fine, better than missing a removal
-                to_remove.append(command)
+            command_log_entry, should_remove = self._process_single_command(command, response)
             response.command_log.append(command_log_entry)
+            if should_remove:
+                to_remove.append(command)
         # remove all processed commands
         for command in to_remove:
             if command in self._queue:
@@ -251,3 +378,102 @@ class CommandQueue:
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"{self.__class__.__name__}(queue_size={len(self._queue)})"
+
+    def get_timing_data(self) -> dict[Type[Command[Any, Any]], CommandTimingData]:
+        """
+        Get timing data for the command queue.
+
+        Relatively expensive operation, so cache this if you need to access it frequently.
+
+        Returns:
+            dict[Type[Command[Any, Any]], CommandTimingData]: A dictionary mapping command types to their timing data, returns an empty dictionary if timing is disabled.
+        """
+        output: dict[Type[Command[Any, Any]], CommandTimingData] = {}
+
+        def calculate_subtimings(
+            input_timings: deque[_InternalQueueTimingEntry],
+        ) -> defaultdict[
+            Type[Command[Any, Any]],
+            tuple[
+                CommandTimingData.CommandTimingEntry, float, CommandTimingData.CommandTimingEntry
+            ],
+        ]:
+            """invert a deque of _InternalQueueTimingEntry objects into a dictionary mapping
+            command types to (command timing, failed percent, callbacks timing) tuples.
+            """
+            intermediate_timings = defaultdict[
+                Type[Command[Any, Any]], list[_InternalQueueTimingEntry]
+            ](list)
+            for entry in input_timings:
+                intermediate_timings[entry.command_type].append(entry)
+            # now calculate the average and standard deviation for each command type
+            output: defaultdict[
+                Type[Command[Any, Any]],
+                tuple[
+                    CommandTimingData.CommandTimingEntry,
+                    float,
+                    CommandTimingData.CommandTimingEntry,
+                ],
+            ] = defaultdict(
+                lambda: (
+                    CommandTimingData.CommandTimingEntry(count=0),
+                    float("nan"),  # NaN for percentage
+                    CommandTimingData.CommandTimingEntry(count=0),
+                )
+            )
+            for command_type, timings in intermediate_timings.items():
+                if len(timings) == 0:
+                    continue
+                output[command_type] = (
+                    CommandTimingData.CommandTimingEntry(
+                        count=len(timings),
+                        avg_elapsed_ms=statistics.mean(
+                            entry.method_elapsed_ms for entry in timings
+                        ),
+                        std_dev_elapsed_ms=(
+                            statistics.stdev(entry.method_elapsed_ms for entry in timings)
+                            if len(timings) > 1
+                            else 0.0
+                        ),
+                    ),
+                    (1 - sum(entry.response_should_proceed for entry in timings) / len(timings)),
+                    CommandTimingData.CommandTimingEntry(
+                        count=sum(entry.callbacks_count for entry in timings),
+                        avg_elapsed_ms=statistics.mean(
+                            entry.callbacks_elapsed_ms for entry in timings
+                        ),
+                        std_dev_elapsed_ms=(
+                            statistics.stdev(entry.callbacks_elapsed_ms for entry in timings)
+                            if len(timings) > 1
+                            else 0.0
+                        ),
+                    ),
+                )
+            return output
+
+        should_defer_subtimings = calculate_subtimings(self._timing_should_defer)
+        should_cancel_subtimings = calculate_subtimings(self._timing_should_cancel)
+        execute_subtimings = calculate_subtimings(self._timing_execute)
+
+        # now build the output
+        encountered_command_types: set[Type[Command[Any, Any]]] = set(
+            should_defer_subtimings.keys()
+            | should_cancel_subtimings.keys()
+            | execute_subtimings.keys()
+        )
+        COMMAND_TIMINGS = 0
+        FAILURE_PERCENTAGE = 1
+        CALLBACKS_TIMINGS = 2
+        for command_type in encountered_command_types:
+            output[command_type] = CommandTimingData(
+                should_defer_timing=should_defer_subtimings[command_type][COMMAND_TIMINGS],
+                should_defer_percentage=should_defer_subtimings[command_type][FAILURE_PERCENTAGE],
+                should_defer_callbacks=should_defer_subtimings[command_type][CALLBACKS_TIMINGS],
+                should_cancel_timing=should_cancel_subtimings[command_type][COMMAND_TIMINGS],
+                should_cancel_percentage=should_cancel_subtimings[command_type][FAILURE_PERCENTAGE],
+                should_cancel_callbacks=should_cancel_subtimings[command_type][CALLBACKS_TIMINGS],
+                execute_timing=execute_subtimings[command_type][COMMAND_TIMINGS],
+                execute_failure_percentage=execute_subtimings[command_type][FAILURE_PERCENTAGE],
+                execute_callbacks=execute_subtimings[command_type][CALLBACKS_TIMINGS],
+            )
+        return output
