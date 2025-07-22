@@ -30,7 +30,7 @@ def test_max_iterations_process_once():
     # Test max iterations with queue.process_once()
     queue = CommandQueue()
     responses: list[CommandResponse] = []
-    for _ in range(101):
+    for _ in range(111):
         responses.append(queue.submit(RunFunctionCommand(RunFunctionCommand.ARGS())))
 
     queue_response = queue.process_once(max_iterations=100)
