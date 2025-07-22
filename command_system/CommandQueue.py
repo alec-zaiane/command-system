@@ -318,6 +318,10 @@ class CommandQueue:
             case ResponseStatus.CANCELED | ResponseStatus.COMPLETED | ResponseStatus.FAILED:
                 queue_process_response.num_commands_processed += 1
                 return output, True
+        # mypy wants a return statement here, but it should never be reached
+        raise RuntimeError(
+            f"Command {command} has an invalid response status: {command.response.status}"
+        )
 
     def process_once(self, max_iterations: int = 1000) -> QueueProcessResponse:
         """
