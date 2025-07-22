@@ -42,19 +42,26 @@ class SleepCommand(Command[SleepArgs, CommandResponse]):
 
 
 def test_sleep_command_timing():
+    # test sleep command with timing enabled and callbacks that take time
     queue = CommandQueue(timing_queue_length=10)
     DEFER_TIME_MS = 100
     CANCEL_TIME_MS = 50
     EXECUTE_TIME_MS = 200
-    response = queue.submit(
-        SleepCommand(
-            SleepCommand.ARGS(
-                defer_sleep_ms=DEFER_TIME_MS,
-                cancel_sleep_ms=CANCEL_TIME_MS,
-                execute_sleep_ms=EXECUTE_TIME_MS,
-            )
+    CALLBACK_SLEEP_MS = 100
+    command = SleepCommand(
+        SleepCommand.ARGS(
+            defer_sleep_ms=DEFER_TIME_MS,
+            cancel_sleep_ms=CANCEL_TIME_MS,
+            execute_sleep_ms=EXECUTE_TIME_MS,
         )
     )
+
+    def sleep_callback(response: ExecutionResponse):
+        time.sleep(CALLBACK_SLEEP_MS / 1000)
+
+    command.add_on_execute_callback(sleep_callback)
+
+    response = queue.submit(command)
     assert response.status == ResponseStatus.CREATED
     queue_response = queue.process_once()
     assert queue_response.num_commands_processed == 1
@@ -65,6 +72,9 @@ def test_sleep_command_timing():
     assert abs(sleep_data.should_defer_timing.avg_elapsed_ms - DEFER_TIME_MS) < 10
     assert abs(sleep_data.should_cancel_timing.avg_elapsed_ms - CANCEL_TIME_MS) < 10
     assert abs(sleep_data.execute_timing.avg_elapsed_ms - EXECUTE_TIME_MS) < 10
+
+    assert sleep_data.execute_callbacks.count == 1
+    assert abs(sleep_data.execute_callbacks.avg_elapsed_ms - CALLBACK_SLEEP_MS) < 10
 
 
 def test_sleep_command_timing_no_timing():
