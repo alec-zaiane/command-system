@@ -103,6 +103,8 @@ class CommandChainBuilder(
         """
         Realizes the command chain builder, creating a CommandChain instance with the current input data and links.
 
+        This does not execute the chain, it only prepares it for execution.
+
         Returns:
             CommandChain[inputDataType, outputDataType]: A CommandChain instance with the current input data and links.
         """

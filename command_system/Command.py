@@ -78,7 +78,7 @@ class Command(ABC, Generic[ArgsType, ResponseType]):
         """
         if not hasattr(self, "_response_type"):
             raise SyntaxError(
-                "Command subclasses must define a `_response_type` class variable, and/or override `_init_response()` to initialize the response."
+                f"Command subclasses ({self.__class__.__name__}) must define a `_response_type` class variable, and/or override `_init_response()` to initialize the response."
             )
         return self._response_type(status=ResponseStatus.CREATED)
 
